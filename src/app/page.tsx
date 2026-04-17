@@ -5,6 +5,7 @@ import StockInput from '@/components/StockInput'
 import FeeSettings from '@/components/FeeSettings'
 import ResultTable from '@/components/ResultTable'
 import PortfolioChart from '@/components/PortfolioChart'
+import TopUpCalculator from '@/components/TopUpCalculator'
 import { calculatePortfolio, formatMoney, calcMinFund } from '@/lib/calculator'
 import { PortfolioResult } from '@/lib/types'
 import {
@@ -22,6 +23,7 @@ export interface StockRow {
   exchange: 'tse' | 'otc'
   loading: boolean
   error: string
+  hold: boolean
 }
 
 function buildInitialStocks(): StockRow[] {
@@ -34,11 +36,12 @@ function buildInitialStocks(): StockRow[] {
     exchange: 'tse' as const,
     loading: false,
     error: '',
+    hold: false,
   }))
   while (rows.length < 4) {
     rows.push({
       code: '', name: '', price: 0, weight: 0,
-      isETF: false, exchange: 'tse', loading: false, error: '',
+      isETF: false, exchange: 'tse', loading: false, error: '', hold: false,
     })
   }
   return rows.slice(0, 4)
@@ -131,11 +134,11 @@ export default function Home() {
   const result: PortfolioResult | null = useMemo(() => {
     const tw = stocks.reduce((s, st) => s + st.weight, 0)
     const hasValid = stocks.some((s) => s.price > 0 && s.weight > 0)
-    if (!hasValid || totalFund <= 0 || Math.abs(tw - 100) > 0.01) return null
+    if (!hasValid || totalFund <= 0 || tw <= 0 || tw > 100.01) return null
 
     const entries = stocks.map((s) => ({
       code: s.code, name: s.name, price: s.price,
-      weight: s.weight, isETF: s.isETF, exchange: s.exchange,
+      weight: s.weight, isETF: s.isETF, exchange: s.exchange, hold: s.hold,
     }))
     return calculatePortfolio(entries, totalFund, discount)
   }, [stocks, totalFund, discount])
@@ -181,9 +184,14 @@ export default function Home() {
           ) : undefined
         }>
           <StockInput stocks={stocks} onStocksChange={setStocks} />
-          {Math.abs(totalWeight - 100) > 0.01 && totalWeight > 0 && (
+          {totalWeight > 100.01 && (
             <div className="mt-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm text-red-600">
-              權重合計 {totalWeight.toFixed(1)}%，需調整為 100% 才能計算
+              權重合計 {totalWeight.toFixed(1)}%，超過 100%，請調整
+            </div>
+          )}
+          {totalWeight > 0 && totalWeight < 99.99 && (
+            <div className="mt-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-sm text-blue-600">
+              已配置 {totalWeight.toFixed(1)}%，預留 {(100 - totalWeight).toFixed(1)}% 資金
             </div>
           )}
           {totalFund <= 0 && (
@@ -203,6 +211,13 @@ export default function Home() {
               <PortfolioChart result={result} />
             </Section>
           </>
+        )}
+
+        {/* 等比例加碼計算 — 只要有股價就顯示 */}
+        {stocks.some((s) => s.price > 0 && s.weight > 0) && (
+          <Section title="等比例加碼試算">
+            <TopUpCalculator stocks={stocks} discount={discount} />
+          </Section>
         )}
 
         {/* Footer */}

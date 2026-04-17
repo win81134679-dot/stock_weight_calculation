@@ -6,6 +6,7 @@ export interface StockEntry {
   weight: number // 0-100
   isETF: boolean
   exchange: 'tse' | 'otc'
+  hold: boolean  // 繼續持倉（不計算賣出成本）
 }
 
 /** 單一股票計算結果 */
@@ -27,6 +28,7 @@ export interface StockResult {
   displayShares: string     // 顯示用：如「2張300股」
   minRequired: number       // 最低資金需求（買1股+手續費）
   insufficientFund: boolean // 資金不足
+  hold: boolean             // 繼續持倉
 }
 
 /** 整體計算結果 */
@@ -37,6 +39,32 @@ export interface PortfolioResult {
   totalSellCost: number
   remainingCash: number
   stocks: StockResult[]
+}
+
+/** 加碼計算 — 單一股票結果 */
+export interface TopUpStockResult {
+  code: string
+  name: string
+  price: number
+  weight: number
+  ratio: number           // 實際佔比 = weight / totalWeight
+  isETF: boolean
+  allocatedAmount: number
+  buyableShares: number
+  lots: number
+  remainingShares: number
+  actualCost: number
+  buyFee: number
+  displayShares: string
+}
+
+/** 加碼計算 — 整體結果 */
+export interface TopUpResult {
+  topUpAmount: number
+  totalWeight: number
+  totalCost: number
+  remainingCash: number
+  stocks: TopUpStockResult[]
 }
 
 /** TWSE API 回傳的單支股票資料 */

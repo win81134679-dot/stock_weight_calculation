@@ -1,4 +1,4 @@
-import { StockEntry, StockResult, PortfolioResult } from './types'
+import { StockEntry, StockResult, PortfolioResult, TopUpStockResult, TopUpResult } from './types'
 
 /** 台股手續費率 0.1425% */
 const BASE_FEE_RATE = 0.001425
@@ -66,6 +66,7 @@ function calcSingleStock(
       displayShares: '0 股',
       minRequired,
       insufficientFund: price > 0,
+      hold: stock.hold ?? false,
     }
   }
 
@@ -109,10 +110,10 @@ function calcSingleStock(
     displayShares = `${remainingShares} 股`
   }
 
-  // 預估賣出成本
+  // 預估賣出成本（持倉標記時歸零）
   const sellAmount = shares * price
-  const sellFee = calcFee(sellAmount, discount)
-  const sellTax = Math.round(sellAmount * taxRate)
+  const sellFee = stock.hold ? 0 : calcFee(sellAmount, discount)
+  const sellTax = stock.hold ? 0 : Math.round(sellAmount * taxRate)
   const sellTotalCost = sellFee + sellTax
 
   return {
@@ -133,6 +134,7 @@ function calcSingleStock(
     displayShares,
     minRequired,
     insufficientFund: false,
+    hold: stock.hold ?? false,
   }
 }
 
@@ -186,6 +188,84 @@ export function calcMinFund(
  */
 export function formatMoney(amount: number): string {
   return Math.round(amount).toLocaleString('zh-TW')
+}
+
+/**
+ * 等比例加碼計算
+ * 按 weight / totalWeight 重新分配加碼金額
+ */
+export function calcTopUp(
+  stocks: { code: string; name: string; price: number; weight: number; isETF: boolean }[],
+  topUpAmount: number,
+  discount: number
+): TopUpResult {
+  const validStocks = stocks.filter((s) => s.price > 0 && s.weight > 0)
+  const totalWeight = validStocks.reduce((sum, s) => sum + s.weight, 0)
+
+  if (totalWeight <= 0 || topUpAmount <= 0) {
+    return { topUpAmount, totalWeight: 0, totalCost: 0, remainingCash: topUpAmount, stocks: [] }
+  }
+
+  const feeRate = getActualFeeRate(discount)
+
+  const results: TopUpStockResult[] = validStocks.map((s) => {
+    const ratio = s.weight / totalWeight
+    const allocated = Math.floor(topUpAmount * ratio)
+
+    // 與 calcSingleStock 相同的迭代法計算可買股數
+    let shares = Math.floor(allocated / (s.price * (1 + feeRate)))
+    let fee = calcFee(shares * s.price, discount)
+    let cost = shares * s.price + fee
+
+    while (cost > allocated && shares > 0) {
+      shares--
+      fee = calcFee(shares * s.price, discount)
+      cost = shares * s.price + fee
+    }
+    while (true) {
+      const nextShares = shares + 1
+      const nextFee = calcFee(nextShares * s.price, discount)
+      const nextCost = nextShares * s.price + nextFee
+      if (nextCost <= allocated) {
+        shares = nextShares
+        fee = nextFee
+        cost = nextCost
+      } else break
+    }
+
+    const lots = Math.floor(shares / 1000)
+    const remainingShares = shares % 1000
+    let displayShares = ''
+    if (lots > 0 && remainingShares > 0) displayShares = `${lots} 張 ${remainingShares} 股`
+    else if (lots > 0) displayShares = `${lots} 張`
+    else displayShares = `${remainingShares} 股`
+
+    return {
+      code: s.code,
+      name: s.name,
+      price: s.price,
+      weight: s.weight,
+      ratio,
+      isETF: s.isETF,
+      allocatedAmount: allocated,
+      buyableShares: shares,
+      lots,
+      remainingShares,
+      actualCost: cost,
+      buyFee: fee,
+      displayShares,
+    }
+  })
+
+  const totalCost = results.reduce((sum, r) => sum + r.actualCost, 0)
+
+  return {
+    topUpAmount,
+    totalWeight,
+    totalCost,
+    remainingCash: topUpAmount - totalCost,
+    stocks: results,
+  }
 }
 
 /**

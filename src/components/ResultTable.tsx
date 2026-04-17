@@ -91,6 +91,11 @@ export default function ResultTable({ result }: Props) {
                 <div>
                   <span className={`font-bold text-sm ${c.text}`}>{s.name || s.code || '-'}</span>
                   <span className="text-[11px] text-slate-400 ml-1.5">{s.code}{s.isETF ? ' • ETF' : ''}</span>
+                  {s.hold && (
+                    <span className="text-[10px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full ml-1.5">
+                      🔒 持倉
+                    </span>
+                  )}
                 </div>
                 <span className="font-mono text-sm">{s.weight}%</span>
               </div>
@@ -134,16 +139,28 @@ export default function ResultTable({ result }: Props) {
             .map((s, i) => (
               <div
                 key={i}
-                className="flex flex-col sm:flex-row sm:justify-between sm:items-center text-sm bg-white rounded-lg px-3 py-2 border border-slate-100 gap-1"
+                className={`flex flex-col sm:flex-row sm:justify-between sm:items-center text-sm bg-white rounded-lg px-3 py-2 border border-slate-100 gap-1 ${s.hold ? 'opacity-50' : ''}`}
               >
-                <span className="text-slate-600 font-medium">{s.name}</span>
-                <span className="font-mono text-slate-700 text-xs sm:text-sm">
-                  手續費 ${formatMoney(s.sellFee)} + 稅 ${formatMoney(s.sellTax)} ={' '}
-                  <span className="font-bold text-rose-600">${formatMoney(s.sellTotalCost)}</span>
+                <span className="text-slate-600 font-medium">
+                  {s.name}
+                  {s.hold && <span className="text-[10px] text-violet-500 ml-1">🔒 持倉不賣</span>}
                 </span>
+                {s.hold ? (
+                  <span className="font-mono text-slate-400 text-xs">$0</span>
+                ) : (
+                  <span className="font-mono text-slate-700 text-xs sm:text-sm">
+                    手續費 ${formatMoney(s.sellFee)} + 稅 ${formatMoney(s.sellTax)} ={' '}
+                    <span className="font-bold text-rose-600">${formatMoney(s.sellTotalCost)}</span>
+                  </span>
+                )}
               </div>
             ))}
         </div>
+        {result.stocks.some((s) => s.hold && s.buyableShares > 0) && (
+          <p className="text-[11px] text-slate-400 mt-2">
+            🔒 標記為「持倉」的股票不計入賣出成本
+          </p>
+        )}
       </div>
     </div>
   )

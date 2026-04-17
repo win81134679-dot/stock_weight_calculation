@@ -11,6 +11,7 @@ interface StockRow {
   exchange: 'tse' | 'otc'
   loading: boolean
   error: string
+  hold: boolean
 }
 
 interface Props {
@@ -20,7 +21,7 @@ interface Props {
 
 export default function StockInput({ stocks, onStocksChange }: Props) {
   const totalWeight = stocks.reduce((sum, s) => sum + s.weight, 0)
-  const weightValid = Math.abs(totalWeight - 100) < 0.01
+  const weightValid = totalWeight > 0 && totalWeight <= 100.01
 
   const updateStock = useCallback(
     (index: number, partial: Partial<StockRow>) => {
@@ -100,11 +101,14 @@ export default function StockInput({ stocks, onStocksChange }: Props) {
         <span className="text-slate-500">權重總計</span>
         <span className={`font-bold text-lg ${weightValid ? 'text-emerald-600' : 'text-red-500'}`}>
           {totalWeight.toFixed(1)}%
-          {!weightValid && (
+          {totalWeight > 100.01 && (
             <span className="text-xs font-normal ml-2">
-              {totalWeight < 100
-                ? `還差 ${(100 - totalWeight).toFixed(1)}%`
-                : `超過 ${(totalWeight - 100).toFixed(1)}%`}
+              超過 {(totalWeight - 100).toFixed(1)}%
+            </span>
+          )}
+          {totalWeight > 0 && totalWeight < 99.99 && (
+            <span className="text-xs font-normal ml-2 text-emerald-500">
+              預留 {(100 - totalWeight).toFixed(1)}% 資金
             </span>
           )}
         </span>
@@ -135,6 +139,19 @@ export default function StockInput({ stocks, onStocksChange }: Props) {
               <span className="text-xs text-emerald-600 font-bold font-mono ml-auto">
                 ${stock.price.toFixed(2)}
               </span>
+            )}
+            {stock.name && (
+              <button
+                type="button"
+                onClick={() => updateStock(i, { hold: !stock.hold })}
+                className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition shrink-0 ${
+                  stock.hold
+                    ? 'bg-violet-100 text-violet-600 ring-1 ring-violet-300'
+                    : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                }`}
+              >
+                {stock.hold ? '🔒 持倉' : '📤 換股'}
+              </button>
             )}
           </div>
 
