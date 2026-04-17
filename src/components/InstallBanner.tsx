@@ -14,8 +14,21 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+/** 每天最多顯示一次 */
+function isDismissedToday(): boolean {
+  try {
+    const val = localStorage.getItem('install-banner-dismissed');
+    if (!val) return false;
+    return val === new Date().toISOString().slice(0, 10);
+  } catch { return false; }
+}
+function markDismissed() {
+  try { localStorage.setItem('install-banner-dismissed', new Date().toISOString().slice(0, 10)); } catch {}
+}
+
 export default function InstallBanner() {
   const [mode, setMode] = useState<BannerMode | null>(null);
+  const [visible, setVisible] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
@@ -26,8 +39,8 @@ export default function InstallBanner() {
     const isIosStandalone = ('standalone' in navigator) && (navigator as { standalone?: boolean }).standalone;
     if (isIosStandalone) return;
 
-    // 已關閉過 → 不顯示
-    if (sessionStorage.getItem('install-banner-dismissed')) return;
+    // 今天已關閉過 → 不顯示
+    if (isDismissedToday()) return;
 
     const ua = navigator.userAgent;
     const isIos = /iphone|ipad|ipod/i.test(ua);
@@ -35,35 +48,40 @@ export default function InstallBanner() {
     if (isIos) {
       const isLine = /line\//i.test(ua);
       const isOtherInApp = /fbav|fban|instagram/i.test(ua);
-      if (isLine) setMode('line');
-      else if (isOtherInApp) setMode('inapp');
-      else setMode('safari');
-      return;
+      // 延遲 1.5 秒後顯示，讓頁面先載入完成
+      const delay = setTimeout(() => {
+        if (isLine) setMode('line');
+        else if (isOtherInApp) setMode('inapp');
+        else setMode('safari');
+      }, 1500);
+      return () => clearTimeout(delay);
     }
 
     // Android / Desktop: 監聽 beforeinstallprompt
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setMode('android');
+      setTimeout(() => setMode('android'), 1500);
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // 所有模式都 5 秒後自動消失
+  // mode 設定後啟動顯示 + 8 秒後自動消失
   useEffect(() => {
     if (!mode) return;
+    // 立即設為可見（觸發進入動畫）
+    setVisible(true);
     const timer = setTimeout(() => {
-      setMode(null);
-      sessionStorage.setItem('install-banner-dismissed', '1');
-    }, 5000);
+      setVisible(false);
+      setTimeout(() => { setMode(null); markDismissed(); }, 300);
+    }, 8000);
     return () => clearTimeout(timer);
   }, [mode]);
 
   const dismiss = useCallback(() => {
-    setMode(null);
-    sessionStorage.setItem('install-banner-dismissed', '1');
+    setVisible(false);
+    setTimeout(() => { setMode(null); markDismissed(); }, 300);
   }, []);
 
   const handleInstall = useCallback(async () => {
@@ -77,18 +95,19 @@ export default function InstallBanner() {
   if (!mode) return null;
 
   // ── 共用外框樣式 ──
-  const wrapperClass = `
-    fixed bottom-6 left-1/2 -translate-x-1/2 z-50
-    flex items-start gap-3
-    px-4 py-3.5
-    rounded-2xl
-    bg-zinc-900/90 text-white
-    text-[13px] font-medium leading-snug
-    shadow-xl shadow-black/20
-    backdrop-blur-md
-    max-w-[340px] w-[calc(100%-2rem)]
-    animate-[slideUp_0.3s_ease-out]
-  `;
+  const wrapperClass = [
+    'fixed bottom-6 left-0 right-0 mx-auto z-50',
+    'flex items-start gap-3',
+    'px-4 py-3.5',
+    'rounded-2xl',
+    'bg-zinc-900/90 text-white',
+    'text-[13px] font-medium leading-snug',
+    'shadow-xl shadow-black/20',
+    'backdrop-blur-md',
+    'max-w-[340px] w-[calc(100%-2rem)]',
+    'transition-all duration-300 ease-out',
+    visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4',
+  ].join(' ');
 
   // ── Android Chrome ──
   if (mode === 'android') {
