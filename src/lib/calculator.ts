@@ -161,6 +161,27 @@ export function calculatePortfolio(
 }
 
 /**
+ * 計算投資組合最低所需資金
+ * 對每檔有效股票，算出「以該權重至少買 1 股所需的總資金」，取最大值
+ */
+export function calcMinFund(
+  stocks: { price: number; weight: number; isETF: boolean }[],
+  discount: number
+): number {
+  const feeRate = getActualFeeRate(discount)
+  let maxRequired = 0
+
+  for (const s of stocks) {
+    if (s.price <= 0 || s.weight <= 0) continue
+    const oneShareCost = s.price + Math.max(s.price * feeRate, MIN_FEE)
+    const totalRequired = Math.ceil(oneShareCost / (s.weight / 100))
+    if (totalRequired > maxRequired) maxRequired = totalRequired
+  }
+
+  return maxRequired
+}
+
+/**
  * 格式化金額（加入千分位逗號）
  */
 export function formatMoney(amount: number): string {

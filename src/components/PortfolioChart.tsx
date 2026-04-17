@@ -65,13 +65,13 @@ export default function PortfolioChart({ result }: Props) {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {/* 圓餅圖 — 權重分佈 */}
       <div>
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
           權重分佈
         </h3>
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={250}>
           <PieChart>
             <Pie
               data={pieData}
@@ -79,8 +79,8 @@ export default function PortfolioChart({ result }: Props) {
               cy="50%"
               labelLine={false}
               label={renderCustomLabel}
-              outerRadius={110}
-              innerRadius={50}
+              outerRadius={90}
+              innerRadius={40}
               dataKey="value"
               stroke="none"
             >
@@ -103,7 +103,7 @@ export default function PortfolioChart({ result }: Props) {
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
           金額分配
         </h3>
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={250}>
           <BarChart data={barData} barGap={4}>
             <XAxis
               dataKey="name"

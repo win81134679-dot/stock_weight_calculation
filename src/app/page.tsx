@@ -1,15 +1,19 @@
 'use client'
 
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import StockInput from '@/components/StockInput'
 import FeeSettings from '@/components/FeeSettings'
 import ResultTable from '@/components/ResultTable'
 import PortfolioChart from '@/components/PortfolioChart'
-import NotificationBar from '@/components/NotificationBar'
-import { calculatePortfolio, formatMoney } from '@/lib/calculator'
-import { Notification, PortfolioResult } from '@/lib/types'
+import { calculatePortfolio, formatMoney, calcMinFund } from '@/lib/calculator'
+import { PortfolioResult } from '@/lib/types'
+import {
+  DEFAULT_STOCKS,
+  DEFAULT_DISCOUNT,
+  DEFAULT_REBALANCE_DATE,
+} from '@/lib/portfolio-config'
 
-interface StockRow {
+export interface StockRow {
   code: string
   name: string
   price: number
@@ -20,24 +24,110 @@ interface StockRow {
   error: string
 }
 
-const defaultStocks: StockRow[] = [
-  { code: '', name: '', price: 0, weight: 25, isETF: false, exchange: 'tse', loading: false, error: '' },
-  { code: '', name: '', price: 0, weight: 25, isETF: false, exchange: 'tse', loading: false, error: '' },
-  { code: '', name: '', price: 0, weight: 25, isETF: false, exchange: 'tse', loading: false, error: '' },
-  { code: '', name: '', price: 0, weight: 25, isETF: false, exchange: 'tse', loading: false, error: '' },
-]
+function buildInitialStocks(): StockRow[] {
+  const rows: StockRow[] = DEFAULT_STOCKS.map((s) => ({
+    code: s.code,
+    name: '',
+    price: 0,
+    weight: s.weight,
+    isETF: false,
+    exchange: 'tse' as const,
+    loading: false,
+    error: '',
+  }))
+  while (rows.length < 4) {
+    rows.push({
+      code: '', name: '', price: 0, weight: 0,
+      isETF: false, exchange: 'tse', loading: false, error: '',
+    })
+  }
+  return rows.slice(0, 4)
+}
 
 export default function Home() {
-  const [stocks, setStocks] = useState<StockRow[]>(defaultStocks)
+  const [stocks, setStocks] = useState<StockRow[]>(buildInitialStocks)
   const [totalFund, setTotalFund] = useState<number>(0)
-  const [discount, setDiscount] = useState<number>(10)
-  const [rebalanceDate, setRebalanceDate] = useState<string>('')
-  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [discount, setDiscount] = useState<number>(DEFAULT_DISCOUNT)
+  const [rebalanceDate, setRebalanceDate] = useState<string>(DEFAULT_REBALANCE_DATE)
+  const hasFetched = useRef(false)
 
-  const dismissNotification = useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id))
-  }, [])
+  // --- 自動查詢 config 中有代碼的股票 ---
+  const fetchStockPrice = useCallback(
+    async (index: number, currentStocks: StockRow[]): Promise<Partial<StockRow>> => {
+      const code = currentStocks[index].code.trim()
+      if (!code) return {}
 
+      try {
+        const exchanges = ['tse', 'otc'] as const
+        for (const ex of exchanges) {
+          const param = `${ex}_${code}.tw`
+          const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(param)}`)
+          const data = await res.json()
+
+          if (data.msgArray && data.msgArray.length > 0) {
+            const info = data.msgArray[0]
+            const price = parseFloat(info.z)
+            const fallbackPrice = parseFloat(info.y)
+            const actualPrice = !isNaN(price) && price > 0 ? price : fallbackPrice
+
+            if (!isNaN(actualPrice) && actualPrice > 0) {
+              const isETF = code.startsWith('00') && code.length >= 4
+              return {
+                name: info.n?.trim() || code,
+                price: actualPrice,
+                isETF,
+                exchange: ex,
+                loading: false,
+                error: '',
+              }
+            }
+          }
+        }
+        return { name: '', price: 0, loading: false, error: '找不到此股票代碼' }
+      } catch {
+        return { loading: false, error: '查詢失敗，請稍後再試' }
+      }
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (hasFetched.current) return
+    hasFetched.current = true
+
+    const initial = buildInitialStocks()
+    const indicesToFetch = initial
+      .map((s, i) => (s.code.trim() ? i : -1))
+      .filter((i) => i >= 0)
+
+    if (indicesToFetch.length === 0) return
+
+    // 標記為 loading
+    const loading = initial.map((s, i) =>
+      indicesToFetch.includes(i) ? { ...s, loading: true } : s
+    )
+    setStocks(loading)
+
+    // 批次查詢
+    Promise.all(
+      indicesToFetch.map((i) => fetchStockPrice(i, initial))
+    ).then((results) => {
+      setStocks((prev) => {
+        const next = [...prev]
+        indicesToFetch.forEach((stockIdx, resultIdx) => {
+          next[stockIdx] = { ...next[stockIdx], ...results[resultIdx] }
+        })
+        return next
+      })
+    })
+  }, [fetchStockPrice])
+
+  // --- 最低資金即時計算（不依賴 totalFund） ---
+  const minFund = useMemo(() => {
+    return calcMinFund(stocks, discount)
+  }, [stocks, discount])
+
+  // --- 投資組合計算結果 ---
   const result: PortfolioResult | null = useMemo(() => {
     const tw = stocks.reduce((s, st) => s + st.weight, 0)
     const hasValid = stocks.some((s) => s.price > 0 && s.weight > 0)
@@ -47,39 +137,25 @@ export default function Home() {
       code: s.code, name: s.name, price: s.price,
       weight: s.weight, isETF: s.isETF, exchange: s.exchange,
     }))
-    const res = calculatePortfolio(entries, totalFund, discount)
-
-    const nots: Notification[] = []
-    res.stocks.forEach((sr) => {
-      if (sr.insufficientFund && sr.code) {
-        nots.push({
-          id: `ins-${sr.code}`,
-          type: 'warning',
-          message: `⚠️ ${sr.name || sr.code}（${sr.code}）權重 ${sr.weight}% 分配 $${formatMoney(sr.allocatedAmount)}，最低需要 $${formatMoney(sr.minRequired)} 元才能買入 1 股`,
-        })
-      }
-    })
-    setNotifications(nots)
-    return res
+    return calculatePortfolio(entries, totalFund, discount)
   }, [stocks, totalFund, discount])
 
   const totalWeight = stocks.reduce((s, st) => s + st.weight, 0)
 
   return (
     <div className="min-h-screen bg-[#FAF9F6]">
-      <NotificationBar notifications={notifications} onDismiss={dismissNotification} />
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
         {/* Header */}
-        <div className="bg-[#2C5F8A] rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow-inner shrink-0">
+        <div className="bg-[#2C5F8A] rounded-2xl p-4 sm:p-6 shadow-lg">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-10 h-10 sm:w-14 sm:h-14 bg-white rounded-xl flex items-center justify-center shadow-inner shrink-0">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.svg" alt="Logo" className="w-10 h-10" />
+              <img src="/logo.svg" alt="Logo" className="w-7 h-7 sm:w-10 sm:h-10" />
             </div>
-            <div>
-              <h1 className="text-2xl font-black text-white tracking-wide">台股持有權重計算器</h1>
-              <p className="text-sm text-white/70 mt-0.5">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-2xl font-black text-white tracking-wide">台股持有權重計算器</h1>
+              <p className="text-xs sm:text-sm text-white/70 mt-0.5 hidden sm:block">
                 STOCK WEIGHT CALCULATOR — 即時股價 × 自訂權重 × 手續費試算
               </p>
             </div>
@@ -92,6 +168,7 @@ export default function Home() {
             totalFund={totalFund} onTotalFundChange={setTotalFund}
             discount={discount} onDiscountChange={setDiscount}
             rebalanceDate={rebalanceDate} onRebalanceDateChange={setRebalanceDate}
+            minFund={minFund}
           />
         </Section>
 
@@ -144,8 +221,8 @@ function Section({ title, right, children }: {
   children: React.ReactNode
 }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+      <div className="flex items-center justify-between mb-3 sm:mb-4">
         <div className="flex items-center gap-2">
           <div className="w-1 h-4 bg-[#4A90C4] rounded-full" />
           <h2 className="text-xs font-bold text-[#4A90C4] uppercase tracking-widest">{title}</h2>

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { getActualFeeRate, formatPercent } from '@/lib/calculator'
+import { getActualFeeRate, formatPercent, formatMoney } from '@/lib/calculator'
 
 interface Props {
   totalFund: number
@@ -10,6 +10,7 @@ interface Props {
   onDiscountChange: (v: number) => void
   rebalanceDate: string
   onRebalanceDateChange: (v: string) => void
+  minFund: number
 }
 
 export default function FeeSettings({
@@ -19,11 +20,13 @@ export default function FeeSettings({
   onDiscountChange,
   rebalanceDate,
   onRebalanceDateChange,
+  minFund,
 }: Props) {
   const actualRate = getActualFeeRate(discount)
+  const isInsufficient = totalFund > 0 && minFund > 0 && totalFund < minFund
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
       {/* 總資金 */}
       <div>
         <label className="text-[11px] text-slate-400 block mb-1.5 font-medium tracking-wide">
@@ -41,6 +44,12 @@ export default function FeeSettings({
             className="w-full rounded-xl border border-slate-200 pl-7 pr-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-blue-400 transition"
           />
         </div>
+        {/* 最低資金提示 */}
+        {minFund > 0 && (
+          <p className={`mt-1.5 text-xs ${isInsufficient ? 'text-amber-600' : 'text-slate-400'}`}>
+            {isInsufficient ? '⚠️ ' : ''}此投資組合最低需要 <span className="font-mono font-semibold">${formatMoney(minFund)}</span> 元
+          </p>
+        )}
       </div>
 
       {/* 手續費折扣 */}
