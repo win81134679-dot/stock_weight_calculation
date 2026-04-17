@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 背景 -->
+  <rect width="512" height="512" fill="#ffffff"/>
+  
+  <!-- 趨勢線（股票上升曲線） -->
+  <path 
+    d="M 100 340 Q 180 320 220 280 T 340 180 Q 380 150 420 120" 
+    fill="none" 
+    stroke="#1a1a1a" 
+    stroke-width="22" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+  />
+  
+  <!-- 趨勢線末端箭頭 -->
+  <path 
+    d="M 400 140 L 420 120 L 398 118" 
+    fill="none" 
+    stroke="#1a1a1a" 
+    stroke-width="22" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+  />
+  
+  <!-- 天秤/權重秤 — 支點 -->
+  <circle cx="256" cy="360" r="12" fill="#1a1a1a" opacity="0.12"/>
+  <line x1="256" y1="348" x2="256" y2="400" stroke="#1a1a1a" stroke-width="22" stroke-linecap="round"/>
+  
+  <!-- 天秤橫桿 -->
+  <line x1="156" y1="400" x2="356" y2="400" stroke="#1a1a1a" stroke-width="22" stroke-linecap="round"/>
+  
+  <!-- 天秤底座 -->
+  <line x1="206" y1="440" x2="306" y2="440" stroke="#1a1a1a" stroke-width="22" stroke-linecap="round"/>
+  <line x1="256" y1="400" x2="256" y2="440" stroke="#1a1a1a" stroke-width="18" stroke-linecap="round"/>
+  
+  <!-- 左秤盤 -->
+  <path 
+    d="M 136 400 Q 136 420 156 420 L 176 420 Q 196 420 196 400" 
+    fill="none" 
+    stroke="#1a1a1a" 
+    stroke-width="18" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+  />
+  
+  <!-- 右秤盤 -->
+  <path 
+    d="M 316 400 Q 316 420 336 420 L 356 420 Q 376 420 376 400" 
+    fill="none" 
+    stroke="#1a1a1a" 
+    stroke-width="18" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+  />
+  
+  <!-- 數據點裝飾 -->
+  <circle cx="220" cy="280" r="8" fill="#1a1a1a" opacity="0.20"/>
+  <circle cx="340" cy="180" r="8" fill="#1a1a1a" opacity="0.15"/>
+</svg>

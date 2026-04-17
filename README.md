@@ -1,8 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 台股持有權重計算器 Stock Weight Calculator
 
-## Getting Started
+即時抓取台灣證交所股價，依自訂權重計算每檔可買張數（1000 股 = 1 張）與手續費，支援 PWA 安裝到桌面。
 
-First, run the development server:
+## 功能
+
+- 🔍 **即時股價查詢** — 串接 TWSE 公開 API，支援上市（tse）/ 上櫃（otc）
+- ⚖️ **自訂權重分配** — 4 檔股票自由設定持有百分比
+- 🧮 **精確費用計算** — 手續費 0.1425%（可打折）+ 證交稅（ETF 0.1% / 一般股 0.3%）
+- 📊 **視覺化圖表** — 圓餅圖（權重分佈）+ 長條圖（金額分配）
+- ⚠️ **資金不足提醒** — 自動偵測並通知最低所需金額
+- 📱 **PWA 可安裝** — 加到手機/桌面主畫面使用
+
+## 技術棧
+
+- **框架**: Next.js 14 (App Router)
+- **語言**: TypeScript
+- **樣式**: Tailwind CSS
+- **圖表**: Recharts
+- **部署**: Vercel
+
+## 開發
+
+```bash
+npm install
+npm run dev
+```
+
+## 部署
+
+Push 到 GitHub 後連接 Vercel 即可自動部署。
 
 ```bash
 npm run dev

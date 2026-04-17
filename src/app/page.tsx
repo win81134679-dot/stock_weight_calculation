@@ -1,101 +1,158 @@
-import Image from "next/image";
+'use client'
+
+import React, { useState, useMemo, useCallback } from 'react'
+import StockInput from '@/components/StockInput'
+import FeeSettings from '@/components/FeeSettings'
+import ResultTable from '@/components/ResultTable'
+import PortfolioChart from '@/components/PortfolioChart'
+import NotificationBar from '@/components/NotificationBar'
+import { calculatePortfolio, formatMoney } from '@/lib/calculator'
+import { Notification, PortfolioResult } from '@/lib/types'
+
+interface StockRow {
+  code: string
+  name: string
+  price: number
+  weight: number
+  isETF: boolean
+  exchange: 'tse' | 'otc'
+  loading: boolean
+  error: string
+}
+
+const defaultStocks: StockRow[] = [
+  { code: '', name: '', price: 0, weight: 25, isETF: false, exchange: 'tse', loading: false, error: '' },
+  { code: '', name: '', price: 0, weight: 25, isETF: false, exchange: 'tse', loading: false, error: '' },
+  { code: '', name: '', price: 0, weight: 25, isETF: false, exchange: 'tse', loading: false, error: '' },
+  { code: '', name: '', price: 0, weight: 25, isETF: false, exchange: 'tse', loading: false, error: '' },
+]
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [stocks, setStocks] = useState<StockRow[]>(defaultStocks)
+  const [totalFund, setTotalFund] = useState<number>(0)
+  const [discount, setDiscount] = useState<number>(10)
+  const [rebalanceDate, setRebalanceDate] = useState<string>('')
+  const [notifications, setNotifications] = useState<Notification[]>([])
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+  }, [])
+
+  const result: PortfolioResult | null = useMemo(() => {
+    const tw = stocks.reduce((s, st) => s + st.weight, 0)
+    const hasValid = stocks.some((s) => s.price > 0 && s.weight > 0)
+    if (!hasValid || totalFund <= 0 || Math.abs(tw - 100) > 0.01) return null
+
+    const entries = stocks.map((s) => ({
+      code: s.code, name: s.name, price: s.price,
+      weight: s.weight, isETF: s.isETF, exchange: s.exchange,
+    }))
+    const res = calculatePortfolio(entries, totalFund, discount)
+
+    const nots: Notification[] = []
+    res.stocks.forEach((sr) => {
+      if (sr.insufficientFund && sr.code) {
+        nots.push({
+          id: `ins-${sr.code}`,
+          type: 'warning',
+          message: `⚠️ ${sr.name || sr.code}（${sr.code}）權重 ${sr.weight}% 分配 $${formatMoney(sr.allocatedAmount)}，最低需要 $${formatMoney(sr.minRequired)} 元才能買入 1 股`,
+        })
+      }
+    })
+    setNotifications(nots)
+    return res
+  }, [stocks, totalFund, discount])
+
+  const totalWeight = stocks.reduce((s, st) => s + st.weight, 0)
+
+  return (
+    <div className="min-h-screen bg-[#FAF9F6]">
+      <NotificationBar notifications={notifications} onDismiss={dismissNotification} />
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+
+        {/* Header */}
+        <div className="bg-[#2C5F8A] rounded-2xl p-6 shadow-lg">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow-inner shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.svg" alt="Logo" className="w-10 h-10" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-white tracking-wide">台股持有權重計算器</h1>
+              <p className="text-sm text-white/70 mt-0.5">
+                STOCK WEIGHT CALCULATOR — 即時股價 × 自訂權重 × 手續費試算
+              </p>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {/* 設定區 */}
+        <Section title="基本設定">
+          <FeeSettings
+            totalFund={totalFund} onTotalFundChange={setTotalFund}
+            discount={discount} onDiscountChange={setDiscount}
+            rebalanceDate={rebalanceDate} onRebalanceDateChange={setRebalanceDate}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        </Section>
+
+        {/* 股票輸入 */}
+        <Section title="股票配置" right={
+          totalFund > 0 ? (
+            <span className="text-xs text-slate-400">
+              總資金 <span className="font-mono font-bold text-slate-600">${formatMoney(totalFund)}</span>
+            </span>
+          ) : undefined
+        }>
+          <StockInput stocks={stocks} onStocksChange={setStocks} />
+          {Math.abs(totalWeight - 100) > 0.01 && totalWeight > 0 && (
+            <div className="mt-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm text-red-600">
+              權重合計 {totalWeight.toFixed(1)}%，需調整為 100% 才能計算
+            </div>
+          )}
+          {totalFund <= 0 && (
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm text-amber-600">
+              請先輸入總資金金額
+            </div>
+          )}
+        </Section>
+
+        {/* 計算結果 */}
+        {result && (
+          <>
+            <Section title="計算結果">
+              <ResultTable result={result} />
+            </Section>
+            <Section title="圖表分析">
+              <PortfolioChart result={result} />
+            </Section>
+          </>
+        )}
+
+        {/* Footer */}
+        <div className="text-center text-xs text-slate-400 py-4">
+          股價來源：台灣證券交易所 TWSE 公開資訊（延遲約 20 秒）<br />
+          本工具僅供參考，不構成投資建議
+        </div>
+      </div>
     </div>
-  );
+  )
+}
+
+function Section({ title, right, children }: {
+  title: string
+  right?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 bg-[#4A90C4] rounded-full" />
+          <h2 className="text-xs font-bold text-[#4A90C4] uppercase tracking-widest">{title}</h2>
+        </div>
+        {right}
+      </div>
+      {children}
+    </div>
+  )
 }

@@ -9,8 +9,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        accent: "#2C5F8A",
+        "accent-2": "#4A90C4",
+        "bg-warm": "#FAF9F6",
+        ink: "#1A1A2E",
+        muted: "#6B7399",
+      },
+      fontFamily: {
+        sans: ['"Noto Sans TC"', '"PingFang TC"', '"Microsoft JhengHei"', 'sans-serif'],
+      },
+      borderRadius: {
+        '2xl': '18px',
+        xl: '12px',
       },
     },
   },
