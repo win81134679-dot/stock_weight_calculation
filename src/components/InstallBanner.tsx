@@ -96,7 +96,7 @@ export default function InstallBanner() {
 
   // ── 共用外框樣式 ──
   const wrapperClass = [
-    'fixed bottom-6 left-0 right-0 mx-auto z-50',
+    'fixed top-4 left-0 right-0 mx-auto z-50',
     'flex items-start gap-3',
     'px-4 py-3.5',
     'rounded-2xl',
@@ -106,7 +106,7 @@ export default function InstallBanner() {
     'backdrop-blur-md',
     'max-w-[340px] w-[calc(100%-2rem)]',
     'transition-all duration-300 ease-out',
-    visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4',
+    visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4',
   ].join(' ');
 
   // ── Android Chrome ──
