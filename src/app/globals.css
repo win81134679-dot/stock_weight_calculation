@@ -24,6 +24,18 @@ body {
   animation: slide-down 0.3s ease-out;
 }
 
+/* 安裝 Banner 滑入動畫 */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 /* 數字輸入去除上下箭頭 */
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
