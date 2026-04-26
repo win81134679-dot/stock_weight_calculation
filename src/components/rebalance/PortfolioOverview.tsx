@@ -11,6 +11,7 @@ import { calcAccountPnL, calcCombinedPnL } from '@/lib/rebalance-calculator'
 import { formatMoney } from '@/lib/calculator'
 import { accountColorStyle } from './AccountManager'
 import PnLHistoryChart from './PnLHistoryChart'
+import ScenarioChart from './ScenarioChart'
 
 interface Props {
   accounts: Account[]
@@ -219,6 +220,13 @@ export default function PortfolioOverview({
           <PnLHistoryChart snapshots={snapshots} accountId={selectedAccountId === '__all__' ? null : selectedAccountId} />
         </div>
       )}
+
+      {/* Scenario simulation chart */}
+      <ScenarioChart
+        holdings={holdings}
+        prices={prices}
+        targetWeights={targetWeights}
+      />
     </div>
   )
 }

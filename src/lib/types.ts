@@ -169,9 +169,11 @@ export interface PriceCache {
   code: string
   name: string
   price: number
+  prevClose: number                   // 昨收價 (y 欄位)
   exchange: 'tse' | 'otc'
   isETF: boolean
   fetchedAt: number                   // Date.now()
+  isMarketOpen: boolean               // z 欄位有效時為 true（盤中），否則為 false（盤後/未開盤）
 }
 
 /** 偏差修正投入試算 — 單標的結果 */

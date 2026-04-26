@@ -56,13 +56,16 @@ export function useCurrentPrices() {
           const price = !isNaN(rawPrice) && rawPrice > 0 ? rawPrice : fallback
 
           if (!isNaN(price) && price > 0) {
+            const prevClose = !isNaN(fallback) && fallback > 0 ? fallback : price
             const cache: PriceCache = {
               code,
               name: (info.n ?? '').trim() || code,
               price,
+              prevClose,
               exchange: 'tse',
               isETF: isETF(code),
               fetchedAt: now,
+              isMarketOpen: !isNaN(rawPrice) && rawPrice > 0,
             }
             results[code] = cache
             foundCodes.add(code)
@@ -85,13 +88,16 @@ export function useCurrentPrices() {
             const fallback = parseFloat(info.y)
             const price = !isNaN(rawPrice) && rawPrice > 0 ? rawPrice : fallback
             if (!isNaN(price) && price > 0) {
+              const prevClose2 = !isNaN(fallback) && fallback > 0 ? fallback : price
               results[code] = {
                 code,
                 name: (info.n ?? '').trim() || code,
                 price,
+                prevClose: prevClose2,
                 exchange: 'otc',
                 isETF: isETF(code),
                 fetchedAt: now,
+                isMarketOpen: !isNaN(rawPrice) && rawPrice > 0,
               }
             }
           }
