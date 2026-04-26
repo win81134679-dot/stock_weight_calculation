@@ -10,8 +10,8 @@ import { Account, Holding, PriceCache, TargetWeight, PnLSnapshot } from '@/lib/t
 import { calcAccountPnL, calcCombinedPnL } from '@/lib/rebalance-calculator'
 import { formatMoney } from '@/lib/calculator'
 import { accountColorStyle } from './AccountManager'
-import PnLHistoryChart from './PnLHistoryChart'
 import ScenarioChart from './ScenarioChart'
+import AccountCharts from './AccountCharts'
 
 interface Props {
   accounts: Account[]
@@ -213,12 +213,13 @@ export default function PortfolioOverview({
         </div>
       )}
 
-      {/* PnL history chart */}
-      {snapshots.length >= 2 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">損益歷史</p>
-          <PnLHistoryChart snapshots={snapshots} accountId={selectedAccountId === '__all__' ? null : selectedAccountId} />
-        </div>
+      {/* Per-account charts: pie + PnL history (only for individual accounts, not combined) */}
+      {selectedAccountId !== '__all__' && displayPnL && (
+        <AccountCharts
+          accountId={selectedAccountId}
+          holdings={displayPnL.holdings}
+          snapshots={snapshots}
+        />
       )}
 
       {/* Scenario simulation chart */}

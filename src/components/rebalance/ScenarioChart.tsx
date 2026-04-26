@@ -174,8 +174,8 @@ export default function ScenarioChart({ holdings, prices }: Props) {
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart data={chartData} margin={{ top: 28, right: 16, left: 8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis
             dataKey="label"
