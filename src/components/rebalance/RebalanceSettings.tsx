@@ -35,6 +35,11 @@ export default function RebalanceSettingsPanel({
   const [importError, setImportError] = useState<string | null>(null)
   const [importSuccess, setImportSuccess] = useState(false)
 
+  // Cloud sync
+  const [syncPassphrase, setSyncPassphrase] = useState('')
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'uploading' | 'downloading' | 'ok' | 'fail'>('idle')
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+
   const totalTargetWeight = settings.targetWeights.reduce((s, t) => s + t.weight, 0)
 
   function handleAddTarget() {
@@ -96,6 +101,71 @@ export default function RebalanceSettingsPanel({
     }
     reader.readAsText(file)
     e.target.value = ''
+  }
+
+  async function handleCloudUpload() {
+    if (!syncPassphrase.trim()) {
+      setSyncMessage('請輸入同步密碼')
+      setSyncStatus('fail')
+      return
+    }
+    setSyncStatus('uploading')
+    setSyncMessage(null)
+    try {
+      const data = onExportJSON()
+      const res = await fetch('/api/kv-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'upload', passphrase: syncPassphrase.trim(), data }),
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setSyncStatus('ok')
+        setSyncMessage('✅ 上傳成功！在其他裝置輸入相同密碼即可下載')
+      } else {
+        setSyncStatus('fail')
+        setSyncMessage(`❌ ${json.error ?? '上傳失敗'}`)
+      }
+    } catch {
+      setSyncStatus('fail')
+      setSyncMessage('❌ 網路錯誤，請稍後重試')
+    }
+    setTimeout(() => { setSyncStatus('idle'); setSyncMessage(null) }, 6000)
+  }
+
+  async function handleCloudDownload() {
+    if (!syncPassphrase.trim()) {
+      setSyncMessage('請輸入同步密碼')
+      setSyncStatus('fail')
+      return
+    }
+    setSyncStatus('downloading')
+    setSyncMessage(null)
+    try {
+      const res = await fetch('/api/kv-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'download', passphrase: syncPassphrase.trim() }),
+      })
+      const json = await res.json()
+      if (res.ok && json.data) {
+        const ok = onImportJSON(json.data)
+        if (ok) {
+          setSyncStatus('ok')
+          setSyncMessage('✅ 下載同步成功！資料已更新')
+        } else {
+          setSyncStatus('fail')
+          setSyncMessage('❌ 資料格式錯誤，可能是密碼錯誤或資料損壞')
+        }
+      } else {
+        setSyncStatus('fail')
+        setSyncMessage(`❌ ${json.error ?? '下載失敗'}`)
+      }
+    } catch {
+      setSyncStatus('fail')
+      setSyncMessage('❌ 網路錯誤，請稍後重試')
+    }
+    setTimeout(() => { setSyncStatus('idle'); setSyncMessage(null) }, 6000)
   }
 
   const feeRate = (0.001425 * (settings.discount / 10) * 100).toFixed(4)
@@ -311,6 +381,43 @@ export default function RebalanceSettingsPanel({
         </div>
         {importError && <p className="text-xs text-red-500 mt-2">{importError}</p>}
         {importSuccess && <p className="text-xs text-green-600 mt-2">✅ 匯入成功！</p>}
+      </div>
+
+      {/* Cloud Sync */}
+      <div>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">☁️ 雲端跨裝置同步</p>
+        <p className="text-xs text-slate-400 mb-3">
+          設定一組同步密碼，在所有裝置輸入相同密碼即可同步資料。<br />
+          密碼請自行記住，遺失無法找回。資料儲存 1 年後自動刪除。
+        </p>
+        <input
+          type="text"
+          placeholder="輸入自訂同步密碼（英數字/中文，最多64字元）"
+          value={syncPassphrase}
+          onChange={(e) => setSyncPassphrase(e.target.value)}
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-300"
+        />
+        <div className="flex gap-3 flex-wrap">
+          <button
+            onClick={handleCloudUpload}
+            disabled={syncStatus === 'uploading' || syncStatus === 'downloading'}
+            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {syncStatus === 'uploading' ? '⏳ 上傳中…' : '⬆️ 上傳同步'}
+          </button>
+          <button
+            onClick={handleCloudDownload}
+            disabled={syncStatus === 'uploading' || syncStatus === 'downloading'}
+            className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {syncStatus === 'downloading' ? '⏳ 下載中…' : '⬇️ 下載同步'}
+          </button>
+        </div>
+        {syncMessage && (
+          <p className={`text-xs mt-2 ${syncStatus === 'ok' ? 'text-green-600' : 'text-red-500'}`}>
+            {syncMessage}
+          </p>
+        )}
       </div>
     </div>
   )
