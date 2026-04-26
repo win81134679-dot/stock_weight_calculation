@@ -108,7 +108,7 @@ export default function InvestmentAdvisor({
                   : 'bg-white border-slate-200 text-slate-600 hover:border-[#4A90C4]'
               }`}
             >
-              ${(amt / 10000).toFixed(0)}萬
+              ${amt % 10000 === 0 ? (amt / 10000).toFixed(0) : (amt / 10000).toFixed(1)}萬
             </button>
           ))}
         </div>
