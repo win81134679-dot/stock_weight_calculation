@@ -11,6 +11,7 @@ import { Account, Holding, PriceCache, TargetWeight } from '@/lib/types'
 import { calcDeviationInvestment } from '@/lib/rebalance-calculator'
 import { formatMoney } from '@/lib/calculator'
 import { accountColorStyle } from './AccountManager'
+import InjectionScenarioChart from './InjectionScenarioChart'
 
 interface Props {
   accounts: Account[]
@@ -244,6 +245,13 @@ export default function InvestmentAdvisor({
           請先設定目標權重並輸入持倉資料
         </div>
       )}
+
+      {/* 資金投入情境模擬：對應本次投入金額 */}
+      <InjectionScenarioChart
+        holdings={holdings.filter((h) => h.accountId === selectedAccountId)}
+        prices={prices}
+        injectionAmount={investAmount}
+      />
     </div>
   )
 }

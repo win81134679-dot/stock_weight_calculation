@@ -12,7 +12,6 @@ import { formatMoney } from '@/lib/calculator'
 import { accountColorStyle } from './AccountManager'
 import ScenarioChart from './ScenarioChart'
 import AccountCharts from './AccountCharts'
-import InjectionScenarioChart from './InjectionScenarioChart'
 
 interface Props {
   accounts: Account[]
@@ -228,12 +227,6 @@ export default function PortfolioOverview({
         holdings={holdings}
         prices={prices}
         targetWeights={targetWeights}
-      />
-
-      {/* Injection scenario chart */}
-      <InjectionScenarioChart
-        holdings={holdings}
-        prices={prices}
       />
     </div>
   )

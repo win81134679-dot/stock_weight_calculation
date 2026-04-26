@@ -25,6 +25,8 @@ import { formatMoney } from '@/lib/calculator'
 interface Props {
   holdings: Holding[]
   prices: Record<string, PriceCache>
+  /** 如果外部傳入金額，則隱藏輸入 UI，直接使用此值 */
+  injectionAmount?: number
 }
 
 const PRESET_AMOUNTS = [10000, 20000, 30000, 50000, 100000, 200000, 500000]
@@ -102,9 +104,13 @@ function CustomTooltip({ active, payload, label, injection, prevCloseTotal }: To
   )
 }
 
-export default function InjectionScenarioChart({ holdings, prices }: Props) {
+export default function InjectionScenarioChart({ holdings, prices, injectionAmount }: Props) {
+  const isControlled = injectionAmount !== undefined
   const [injection, setInjection] = useState<number>(0)
   const [inputVal, setInputVal] = useState<string>('')
+
+  // When controlled, use external amount
+  const effectiveInjection = isControlled ? injectionAmount : injection
 
   const hasData = holdings.length > 0 && Object.keys(prices).length > 0
 
@@ -121,7 +127,7 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
     for (let pct = -10; pct <= 10; pct++) {
       const factor = 1 + pct / 100
       const currentVal = Math.round(prevTotal * factor)
-      const withInjVal = Math.round((prevTotal + injection) * factor)
+      const withInjVal = Math.round((prevTotal + effectiveInjection) * factor)
       points.push({
         pct,
         label: `${pct >= 0 ? '+' : ''}${pct}%`,
@@ -133,12 +139,12 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
     }
 
     return { chartData: points, prevCloseTotal: Math.round(prevTotal) }
-  }, [holdings, prices, injection, hasData])
+  }, [holdings, prices, effectiveInjection, hasData])
 
   if (!hasData) return null
 
   const allValues = chartData.flatMap((d) =>
-    injection > 0 ? [d.current, d.withInj] : [d.current]
+    effectiveInjection > 0 ? [d.current, d.withInj] : [d.current]
   )
   const minVal = Math.min(...allValues)
   const maxVal = Math.max(...allValues)
@@ -157,9 +163,9 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
   }
 
   const injLabel =
-    injection >= 10000
-      ? `${injection % 10000 === 0 ? (injection / 10000).toFixed(0) : (injection / 10000).toFixed(1)} 萬`
-      : `${injection.toLocaleString()}`
+    effectiveInjection >= 10000
+      ? `${effectiveInjection % 10000 === 0 ? (effectiveInjection / 10000).toFixed(0) : (effectiveInjection / 10000).toFixed(1)} 萬`
+      : `${effectiveInjection.toLocaleString()}`
 
   // Table: full -10% to +10%
   const tableRows = chartData
@@ -176,51 +182,53 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
         </p>
       </div>
 
-      {/* Input row */}
-      <div className="flex flex-wrap gap-2 mb-4 items-center">
-        <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 min-w-[160px]">
-          <span className="text-slate-400 text-sm">$</span>
-          <input
-            type="number"
-            min="0"
-            step="0.1"
-            value={inputVal}
-            onChange={(e) => handleInput(e.target.value)}
-            placeholder="0.0"
-            className="w-20 bg-transparent text-sm outline-none"
-          />
-          <span className="text-slate-400 text-xs">萬</span>
-        </div>
-        {PRESET_AMOUNTS.map((amt) => {
-          const label =
-            amt % 10000 === 0 ? `${amt / 10000}萬` : `${(amt / 10000).toFixed(1)}萬`
-          const active = injection === amt
-          return (
+      {/* Input row — only shown in standalone mode */}
+      {!isControlled && (
+        <div className="flex flex-wrap gap-2 mb-4 items-center">
+          <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 min-w-[160px]">
+            <span className="text-slate-400 text-sm">$</span>
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={inputVal}
+              onChange={(e) => handleInput(e.target.value)}
+              placeholder="0.0"
+              className="w-20 bg-transparent text-sm outline-none"
+            />
+            <span className="text-slate-400 text-xs">萬</span>
+          </div>
+          {PRESET_AMOUNTS.map((amt) => {
+            const label =
+              amt % 10000 === 0 ? `${amt / 10000}萬` : `${(amt / 10000).toFixed(1)}萬`
+            const active = injection === amt
+            return (
+              <button
+                key={amt}
+                onClick={() => handlePreset(amt)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  active
+                    ? 'bg-[#2C5F8A] text-white border-[#2C5F8A]'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-[#4A90C4]'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+          {injection > 0 && (
             <button
-              key={amt}
-              onClick={() => handlePreset(amt)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                active
-                  ? 'bg-[#2C5F8A] text-white border-[#2C5F8A]'
-                  : 'bg-white border-slate-200 text-slate-600 hover:border-[#4A90C4]'
-              }`}
+              onClick={() => { setInjection(0); setInputVal('') }}
+              className="px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500"
             >
-              {label}
+              清除
             </button>
-          )
-        })}
-        {injection > 0 && (
-          <button
-            onClick={() => { setInjection(0); setInputVal('') }}
-            className="px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-500"
-          >
-            清除
-          </button>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Summary bar */}
-      {injection > 0 && (
+      {effectiveInjection > 0 && (
         <div className="flex flex-wrap gap-3 mb-4 text-xs">
           <div className="bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
             <span className="text-slate-400">目前持倉（昨收）</span>
@@ -230,12 +238,12 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
           </div>
           <div className="bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
             <span className="text-slate-400">投入金額</span>
-            <span className="font-mono font-bold text-[#2C5F8A] ml-2">${formatMoney(injection)}</span>
+            <span className="font-mono font-bold text-[#2C5F8A] ml-2">${formatMoney(effectiveInjection)}</span>
           </div>
           <div className="bg-green-50 rounded-lg px-3 py-2 border border-green-100">
             <span className="text-slate-400">投入後合計（昨收）</span>
             <span className="font-mono font-bold text-green-700 ml-2">
-              ${formatMoney(prevCloseTotal + injection)}
+              ${formatMoney(prevCloseTotal + effectiveInjection)}
             </span>
           </div>
         </div>
@@ -265,12 +273,12 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
                 active={props.active}
                 payload={props.payload as unknown as Array<{ name: string; value: number; color: string }> | undefined}
                 label={props.label as string | undefined}
-                injection={injection}
+                injection={effectiveInjection}
                 prevCloseTotal={prevCloseTotal}
               />
             )}
           />
-          {injection > 0 && <Legend verticalAlign="top" height={28} />}
+          {effectiveInjection > 0 && <Legend verticalAlign="top" height={28} />}
           <ReferenceLine x="+0%" stroke="#94a3b8" strokeDasharray="4 3" strokeWidth={1} />
           <Line
             type="monotone"
@@ -281,7 +289,7 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
             dot={false}
             activeDot={{ r: 4 }}
           />
-          {injection > 0 && (
+          {effectiveInjection > 0 && (
             <Line
               type="monotone"
               dataKey="withInj"
@@ -296,7 +304,7 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
       </ResponsiveContainer>
 
       {/* Detail table */}
-      {injection > 0 && (
+      {effectiveInjection > 0 && (
         <div className="mt-5">
           <p className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide">
             各情境損益明細
@@ -317,7 +325,7 @@ export default function InjectionScenarioChart({ holdings, prices }: Props) {
                 {tableRows.map((d) => {
                   const isPos = d.pct > 0
                   const isZero = d.pct === 0
-                  const totalGain = d.withInj - (prevCloseTotal + injection)
+                  const totalGain = d.withInj - (prevCloseTotal + effectiveInjection)
                   return (
                     <tr
                       key={d.pct}
