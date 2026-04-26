@@ -24,7 +24,6 @@ interface Props {
   onDeleteTransaction: (txId: string) => void
 }
 
-type InputMode = 'quick' | 'transaction'
 
 export default function HoldingEditor({
   accounts,
@@ -38,7 +37,6 @@ export default function HoldingEditor({
   onDeleteTransaction,
 }: Props) {
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id ?? '')
-  const [mode, setMode] = useState<InputMode>('quick')
 
   // Quick mode form
   const [qCode, setQCode] = useState('')
@@ -157,29 +155,8 @@ export default function HoldingEditor({
         })}
       </div>
 
-      {/* Mode toggle */}
-      <div className="flex bg-slate-100 rounded-lg p-1 gap-1 w-fit">
-        <button
-          onClick={() => setMode('quick')}
-          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            mode === 'quick' ? 'bg-white shadow text-[#2C5F8A]' : 'text-slate-500'
-          }`}
-        >
-          快速輸入
-        </button>
-        <button
-          onClick={() => setMode('transaction')}
-          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            mode === 'transaction' ? 'bg-white shadow text-[#2C5F8A]' : 'text-slate-500'
-          }`}
-        >
-          交易記錄
-        </button>
-      </div>
-
-      {/* Quick mode */}
-      {mode === 'quick' && (
-        <div className={`rounded-xl border p-4 ${style.bg} ${style.border}`}>
+      {/* Quick input — always visible */}
+      <div className={`rounded-xl border p-4 ${style.bg} ${style.border}`}>
           <p className="text-xs font-semibold text-slate-500 mb-3">新增 / 更新持倉（{account?.name}）</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
@@ -225,12 +202,10 @@ export default function HoldingEditor({
               </div>
             </div>
           </div>
-        </div>
-      )}
+      </div>
 
-      {/* Transaction mode */}
-      {mode === 'transaction' && (
-        <div className={`rounded-xl border p-4 ${style.bg} ${style.border}`}>
+      {/* Add transaction — always visible */}
+      <div className={`rounded-xl border p-4 ${style.bg} ${style.border}`}>
           <p className="text-xs font-semibold text-slate-500 mb-3">新增交易紀錄（{account?.name}）</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <div>
@@ -320,8 +295,7 @@ export default function HoldingEditor({
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </div>
 
       {/* Holdings table */}
       {acctHoldings.length > 0 && (
@@ -386,8 +360,8 @@ export default function HoldingEditor({
         </div>
       )}
 
-      {/* Transaction history */}
-      {mode === 'transaction' && acctTxs.length > 0 && (
+      {/* Transaction history — always visible when data exists */}
+      {acctTxs.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
             {account?.name} — 交易紀錄

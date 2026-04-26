@@ -124,7 +124,7 @@ export default function AccountCharts({ accountId, holdings, snapshots }: Props)
   if (pieData.length === 0 && !hasSnapshots && snapshots.length === 0) return null
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+    <div className="flex flex-col gap-4 mt-2">
       {/* 圓餅圖 */}
       {pieData.length > 0 && (
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
