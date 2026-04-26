@@ -7,8 +7,9 @@ const KEY_PREFIX = 'portfolio_sync:'
 const TTL = 60 * 60 * 24 * 365
 
 function getRedis() {
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  // Support both Vercel KV integration naming (KV_REST_API_*) and direct Upstash naming
+  const url = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) {
     return null
   }
