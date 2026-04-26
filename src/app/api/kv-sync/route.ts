@@ -57,14 +57,17 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.action === 'download') {
-    const raw = await redis.get<string>(key)
-    if (!raw) {
+    // Use unknown type: Upstash auto-parses valid JSON strings into objects on retrieval
+    const raw: unknown = await redis.get(key)
+    if (raw === null || raw === undefined) {
       return NextResponse.json(
         { error: '找不到此同步密碼的資料，請確認密碼正確或先在原裝置上傳' },
         { status: 404 }
       )
     }
-    return NextResponse.json({ ok: true, data: raw })
+    // Normalise back to string regardless of how Upstash returned it
+    const dataStr = typeof raw === 'string' ? raw : JSON.stringify(raw)
+    return NextResponse.json({ ok: true, data: dataStr })
   }
 
   return NextResponse.json({ error: '未知動作' }, { status: 400 })
