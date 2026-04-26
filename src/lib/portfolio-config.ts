@@ -10,14 +10,13 @@ export interface StockConfig {
 
 /** 預設股票配置 */
 export const DEFAULT_STOCKS: StockConfig[] = [
-  { code: '2313', weight: 19.3 },
-  { code: '3443', weight: 5.7 },
-  { code: '4958', weight: 6.0 },
-  { code: '6515', weight: 29.1 },
+  { code: '00927',  weight: 60 },
+  { code: '00988A', weight: 20 },
+  { code: '00997A', weight: 20 },
 ]
 
 /** 手續費折扣（10 = 不打折 = 原價, 6 = 6折） */
-export const DEFAULT_DISCOUNT = 10
+export const DEFAULT_DISCOUNT = 6
 
 /** 預計換股日期（留空表示不設定） */
-export const DEFAULT_REBALANCE_DATE = '2026-04-01'
+export const DEFAULT_REBALANCE_DATE = '2026-07-01'
