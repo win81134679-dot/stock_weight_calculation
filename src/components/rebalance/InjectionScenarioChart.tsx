@@ -42,24 +42,24 @@ interface ChartPoint {
 
 interface TooltipProps {
   active?: boolean
-  payload?: Array<{ name: string; value: number; color: string }>
+  payload?: Array<{ payload: ChartPoint }>
   label?: string
-  injection: number
+  effectiveInjection: number
   prevCloseTotal: number
 }
 
-function CustomTooltip({ active, payload, label, injection, prevCloseTotal }: TooltipProps) {
+function CustomTooltip({ active, payload, label, effectiveInjection, prevCloseTotal }: TooltipProps) {
   if (!active || !payload || payload.length === 0) return null
 
-  const currentPoint = payload.find((p) => p.name === 'current')
-  const withInjPoint = payload.find((p) => p.name === 'withInj')
+  // Read pre-computed values directly from ChartPoint (avoids name-matching bugs)
+  const point = payload[0]?.payload
+  if (!point) return null
 
-  const currentVal = currentPoint?.value ?? 0
-  const withInjVal = withInjPoint?.value ?? 0
-
-  const currentGain = currentVal - prevCloseTotal
-  const totalGain = withInjVal - (prevCloseTotal + injection)
-  const injGain = withInjVal - currentVal
+  const currentVal = point.current
+  const withInjVal = point.withInj
+  const currentGain = point.currentGain
+  const injGain = point.injGain
+  const totalGain = withInjVal - (prevCloseTotal + effectiveInjection)
 
   const isCurrentPos = currentGain >= 0
   const isTotalPos = totalGain >= 0
@@ -78,7 +78,7 @@ function CustomTooltip({ active, payload, label, injection, prevCloseTotal }: To
             {isCurrentPos ? '+' : ''}${formatMoney(currentGain)}
           </span>
         </div>
-        {injection > 0 && (
+        {effectiveInjection > 0 && (
           <>
             <div className="border-t border-slate-100 my-1" />
             <div className="flex justify-between gap-4">
@@ -271,9 +271,9 @@ export default function InjectionScenarioChart({ holdings, prices, injectionAmou
             content={(props) => (
               <CustomTooltip
                 active={props.active}
-                payload={props.payload as unknown as Array<{ name: string; value: number; color: string }> | undefined}
+                payload={props.payload as unknown as Array<{ payload: ChartPoint }> | undefined}
                 label={props.label as string | undefined}
-                injection={effectiveInjection}
+                effectiveInjection={effectiveInjection}
                 prevCloseTotal={prevCloseTotal}
               />
             )}
