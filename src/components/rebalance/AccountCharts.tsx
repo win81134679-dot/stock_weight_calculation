@@ -121,7 +121,7 @@ export default function AccountCharts({ accountId, holdings, snapshots }: Props)
 
   const hasSnapshots = snapshots.length >= 2
 
-  if (pieData.length === 0 && !hasSnapshots) return null
+  if (pieData.length === 0 && !hasSnapshots && snapshots.length === 0) return null
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
@@ -188,13 +188,22 @@ export default function AccountCharts({ accountId, holdings, snapshots }: Props)
       )}
 
       {/* PnL 折線圖 */}
-      {hasSnapshots && (
-        <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">損益歷史</p>
-          <p className="text-xs text-slate-400 mb-3">此帳戶每日損益快照</p>
+      <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">損益歷史</p>
+        <p className="text-xs text-slate-400 mb-3">此帳戶每日損益快照</p>
+        {hasSnapshots ? (
           <PnLHistoryChart snapshots={snapshots} accountId={accountId} />
-        </div>
-      )}
+        ) : (
+          <div className="flex flex-col items-center justify-center h-40 text-slate-400 text-center">
+            <div className="text-3xl mb-2">📅</div>
+            <p className="text-sm font-medium text-slate-500">資料累積中</p>
+            <p className="text-xs mt-1">
+              目前有 {snapshots.length} 筆快照<br />
+              明天再開啟 App 即可看到折線圖
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
