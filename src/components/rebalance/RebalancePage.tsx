@@ -45,7 +45,7 @@ export default function RebalancePage() {
     updateSettings,
     addAllocationConfig, updateAllocationConfig, deleteAllocationConfig, duplicateAllocationConfig, setAccountAllocationConfig,
     addSnapshot,
-    addDividend, deleteDividend, bulkUpsertDividends,
+    addDividend, deleteDividend, bulkUpsertDividends, setDividendEntryDate,
     exportJSON, importJSON,
   } = usePortfolioStore()
 
@@ -284,13 +284,16 @@ export default function RebalancePage() {
             <DividendManager
               accounts={store.accounts}
               holdings={store.holdings}
+              transactions={store.transactions}
               dividends={store.dividends}
+              dividendEntryDates={store.dividendEntryDates ?? {}}
               prices={Object.fromEntries(
                 Object.entries(prices).map(([code, pc]) => [code, { price: pc.price, avgCost: undefined }])
               )}
               onAddDividend={addDividend}
               onDeleteDividend={deleteDividend}
               onBulkUpsert={bulkUpsertDividends}
+              onSetDividendEntryDate={setDividendEntryDate}
             />
           )}
 

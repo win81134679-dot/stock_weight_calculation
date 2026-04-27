@@ -40,6 +40,7 @@ import {
   addDividend,
   deleteDividend,
   bulkUpsertDividends,
+  setDividendEntryDate,
   exportStoreAsJSON,
   importStoreFromJSON,
 } from '@/lib/portfolio-store'
@@ -127,6 +128,10 @@ export function usePortfolioStore() {
     setStore((s) => bulkUpsertDividends(s, records))
   }, [])
 
+  const handleSetDividendEntryDate = useCallback((accountId: string, code: string, date: string) => {
+    setStore((s) => setDividendEntryDate(s, accountId, code, date))
+  }, [])
+
   // ── AllocationConfig CRUD ─────────────────────────────────
 
   const handleAddAllocationConfig = useCallback((config: Omit<AllocationConfig, 'id'>) => {
@@ -198,6 +203,7 @@ export function usePortfolioStore() {
     addDividend: handleAddDividend,
     deleteDividend: handleDeleteDividend,
     bulkUpsertDividends: handleBulkUpsertDividends,
+    setDividendEntryDate: handleSetDividendEntryDate,
     // I/O
     exportJSON: handleExport,
     importJSON: handleImport,

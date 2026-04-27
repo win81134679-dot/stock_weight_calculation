@@ -2,22 +2,47 @@
 
 /**
  * DividendManager.tsx
- * ETF 配息紀錄管理：自動從 TWSE API 抓取 + 手動補登。
- * 顯示累積領息、含息報酬率。
+ * ETF 配息紀錄管理。
+ * - 每個帳戶+ETF 設定「進場日」，只抓取進場日之後的配息
+ * - 自動同步：過濾 exDate < 進場日，已存在的紀錄不覆寫
+ * - 手動補登
+ * - 配息歷史
  */
 
 import React, { useState, useMemo, useCallback } from 'react'
-import { Account, Holding, DividendRecord } from '@/lib/types'
+import { Account, Holding, Transaction, DividendRecord } from '@/lib/types'
 import { formatMoney } from '@/lib/calculator'
 
 interface Props {
   accounts: Account[]
   holdings: Holding[]
+  transactions: Transaction[]
   dividends: DividendRecord[]
+  dividendEntryDates: Record<string, string>  // key: `${accountId}_${code}`
   prices: Record<string, { price: number; avgCost?: number }>
   onAddDividend: (record: Omit<DividendRecord, 'id'>) => void
   onDeleteDividend: (id: string) => void
   onBulkUpsert: (records: Omit<DividendRecord, 'id'>[]) => void
+  onSetDividendEntryDate: (accountId: string, code: string, date: string) => void
+}
+
+/** 計算某帳戶+ETF 的有效進場日（優先用自訂，其次取最早買入交易） */
+function resolveEntryDate(
+  accountId: string,
+  code: string,
+  transactions: Transaction[],
+  dividendEntryDates: Record<string, string>
+): string {
+  const key = `${accountId}_${code}`
+  if (dividendEntryDates[key]) return dividendEntryDates[key]
+
+  const buyDates = transactions
+    .filter((t) => t.accountId === accountId && t.code === code && t.type === 'buy')
+    .map((t) => t.date)
+    .sort()
+
+  if (buyDates.length > 0) return buyDates[0]
+  return new Date().toISOString().split('T')[0]
 }
 
 const ACCOUNT_DOT: Record<string, string> = {
@@ -25,20 +50,23 @@ const ACCOUNT_DOT: Record<string, string> = {
   purple: 'bg-violet-400', pink: 'bg-pink-400', orange: 'bg-orange-400', teal: 'bg-teal-400',
 }
 
-interface AutoFetchState {
-  code: string
+interface FetchState {
   status: 'idle' | 'loading' | 'done' | 'error'
   count: number
+  skipped: number
 }
 
 export default function DividendManager({
   accounts,
   holdings,
+  transactions,
   dividends,
+  dividendEntryDates,
   prices,
   onAddDividend,
   onDeleteDividend,
   onBulkUpsert,
+  onSetDividendEntryDate,
 }: Props) {
   // Form state
   const [formAccountId, setFormAccountId] = useState<string>(accounts[0]?.id ?? '')
@@ -48,7 +76,10 @@ export default function DividendManager({
   const [formNote, setFormNote] = useState<string>('')
 
   // Auto-fetch state per code
-  const [fetchStates, setFetchStates] = useState<Record<string, AutoFetchState>>({})
+  const [fetchStates, setFetchStates] = useState<Record<string, FetchState>>({})
+
+  // 進場日編輯暫存（尚未儲存的狀態）
+  const [editingEntryDate, setEditingEntryDate] = useState<Record<string, string>>({})
 
   // Unique ETF codes from holdings
   const uniqueCodes = useMemo(() => {
@@ -65,25 +96,75 @@ export default function DividendManager({
     ? Math.round(formShares * parseFloat(formCashPerShare) * 100) / 100
     : 0
 
-  /** 自動抓取單一 ETF 配息 */
+  // ── 進場日 helpers ──────────────────────────────────────────────
+
+  const getDisplayEntryDate = useCallback(
+    (accountId: string, code: string): string => {
+      const key = `${accountId}_${code}`
+      if (editingEntryDate[key] !== undefined) return editingEntryDate[key]
+      return resolveEntryDate(accountId, code, transactions, dividendEntryDates)
+    },
+    [editingEntryDate, transactions, dividendEntryDates]
+  )
+
+  const getEntryDateSource = useCallback(
+    (accountId: string, code: string): string => {
+      if (dividendEntryDates[`${accountId}_${code}`]) return '自訂'
+      const hasTx = transactions.some(
+        (t) => t.accountId === accountId && t.code === code && t.type === 'buy'
+      )
+      return hasTx ? '推算自交易' : '預設'
+    },
+    [dividendEntryDates, transactions]
+  )
+
+  const handleEntryDateChange = (accountId: string, code: string, value: string) => {
+    const key = `${accountId}_${code}`
+    setEditingEntryDate((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleEntryDateSave = (accountId: string, code: string) => {
+    const key = `${accountId}_${code}`
+    const date = editingEntryDate[key]
+    if (date) {
+      onSetDividendEntryDate(accountId, code, date)
+      setEditingEntryDate((prev) => { const n = { ...prev }; delete n[key]; return n })
+    }
+  }
+
+  const handleEntryDateReset = (accountId: string, code: string) => {
+    onSetDividendEntryDate(accountId, code, '')
+    const key = `${accountId}_${code}`
+    setEditingEntryDate((prev) => { const n = { ...prev }; delete n[key]; return n })
+  }
+
+  /** 自動抓取單一 ETF 配息（進場日之後才算） */
   const autoFetch = useCallback(async (code: string) => {
-    setFetchStates((prev) => ({ ...prev, [code]: { code, status: 'loading', count: 0 } }))
+    setFetchStates((prev) => ({ ...prev, [code]: { status: 'loading', count: 0, skipped: 0 } }))
     try {
       const res = await fetch(`/api/etf-dividend?code=${encodeURIComponent(code)}`)
       const data = await res.json()
 
       if (!res.ok || !data.records || data.records.length === 0) {
-        setFetchStates((prev) => ({ ...prev, [code]: { code, status: 'error', count: 0 } }))
+        setFetchStates((prev) => ({ ...prev, [code]: { status: 'error', count: 0, skipped: 0 } }))
         return
       }
 
-      // Build records for each account that holds this code
-      const records: Omit<DividendRecord, 'id'>[] = []
+      const toUpsert: Omit<DividendRecord, 'id'>[] = []
+      let totalSkipped = 0
+
       for (const acct of accounts) {
         const holding = holdings.find((h) => h.accountId === acct.id && h.code === code)
         if (!holding) continue
+
+        const entryDate = resolveEntryDate(acct.id, code, transactions, dividendEntryDates)
+
         for (const r of data.records as { exDate: string; cashPerShare: number }[]) {
-          records.push({
+          if (r.exDate < entryDate) {
+            totalSkipped++
+            continue
+          }
+          toUpsert.push({
             accountId: acct.id,
             code,
             exDate: r.exDate,
@@ -95,18 +176,18 @@ export default function DividendManager({
         }
       }
 
-      if (records.length > 0) {
-        onBulkUpsert(records)
+      if (toUpsert.length > 0) {
+        onBulkUpsert(toUpsert)
       }
 
       setFetchStates((prev) => ({
         ...prev,
-        [code]: { code, status: 'done', count: records.length },
+        [code]: { status: 'done', count: toUpsert.length, skipped: totalSkipped },
       }))
     } catch {
-      setFetchStates((prev) => ({ ...prev, [code]: { code, status: 'error', count: 0 } }))
+      setFetchStates((prev) => ({ ...prev, [code]: { status: 'error', count: 0, skipped: 0 } }))
     }
-  }, [accounts, holdings, onBulkUpsert])
+  }, [accounts, holdings, transactions, dividendEntryDates, onBulkUpsert])
 
   /** 全部 ETF 一鍵同步 */
   const autoFetchAll = useCallback(async () => {
@@ -212,23 +293,93 @@ export default function DividendManager({
         </div>
       )}
 
+      {/* 進場日設定 */}
+      {holdings.length > 0 && (
+        <div className="glass-card p-4">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-[#1A1A2E]">📅 進場日設定</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              系統只抓取「進場日」之後的配息，避免計算未持有期間的配息。預設自動推算自最早的買入交易。
+            </p>
+          </div>
+          <div className="space-y-2">
+            {holdings.map((h) => {
+              const key = `${h.accountId}_${h.code}`
+              const acct = accounts.find((a) => a.id === h.accountId)
+              const dotColors: Record<string, string> = {
+                blue: 'bg-blue-400', green: 'bg-emerald-400', yellow: 'bg-yellow-400',
+                purple: 'bg-violet-400', pink: 'bg-pink-400', orange: 'bg-orange-400', teal: 'bg-teal-400',
+              }
+              const dotClass = acct ? (dotColors[acct.color] ?? 'bg-slate-300') : 'bg-slate-300'
+              const displayDate = getDisplayEntryDate(h.accountId, h.code)
+              const source = getEntryDateSource(h.accountId, h.code)
+              const isCustomized = !!dividendEntryDates[key]
+              const isEditing = editingEntryDate[key] !== undefined
+
+              return (
+                <div key={key} className="flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center gap-1.5 min-w-[60px]">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${dotClass}`} />
+                    <span className="text-xs text-slate-600 font-medium">{acct?.name ?? h.accountId}</span>
+                  </div>
+                  <span className="font-mono text-xs font-bold text-[#1A1A2E] min-w-[56px]">{h.code}</span>
+                  <input
+                    type="date"
+                    value={displayDate}
+                    onChange={(e) => handleEntryDateChange(h.accountId, h.code, e.target.value)}
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-[#4A90C4] font-mono"
+                  />
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    isCustomized
+                      ? 'bg-violet-50 text-violet-600 border border-violet-100'
+                      : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    {source}
+                  </span>
+                  {isEditing && (
+                    <button
+                      onClick={() => handleEntryDateSave(h.accountId, h.code)}
+                      className="text-[10px] px-2 py-1 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors"
+                    >
+                      儲存
+                    </button>
+                  )}
+                  {isCustomized && !isEditing && (
+                    <button
+                      onClick={() => handleEntryDateReset(h.accountId, h.code)}
+                      className="text-[10px] text-slate-400 hover:text-red-400 transition-colors"
+                      title="重設為自動推算"
+                    >
+                      重設
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Auto Sync */}
       <div className="glass-card p-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
           <div>
-            <p className="text-sm font-semibold text-[#1A1A2E]">自動同步配息</p>
-            <p className="text-xs text-slate-400 mt-0.5">從 TWSE 自動抓取您持倉 ETF 的歷史配息資料</p>
+            <p className="text-sm font-semibold text-[#1A1A2E]">🔄 自動同步配息</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              從 Yahoo Finance 抓取配息紀錄，只計算進場日之後的配息。已存在的紀錄不會重複或複寫。
+            </p>
           </div>
-          <button
-            onClick={autoFetchAll}
-            className="shrink-0 px-4 py-2 bg-[#2C5F8A] text-white text-sm font-semibold rounded-xl hover:bg-[#245278] transition-colors"
-          >
-            一鍵同步所有 ETF
-          </button>
+          {uniqueCodes.length > 0 && (
+            <button
+              onClick={autoFetchAll}
+              className="shrink-0 px-4 py-2 bg-[#2C5F8A] text-white text-sm font-semibold rounded-xl hover:bg-[#245278] transition-colors"
+            >
+              一鍵同步所有 ETF
+            </button>
+          )}
         </div>
 
-        {/* Per-code sync status */}
-        {uniqueCodes.length > 0 && (
+        {uniqueCodes.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {uniqueCodes.map((code) => {
               const st = fetchStates[code]
@@ -236,16 +387,14 @@ export default function DividendManager({
                 <div key={code} className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 rounded-lg px-3 py-1.5">
                   <span className="font-mono text-xs font-semibold text-[#1A1A2E]">{code}</span>
                   {!st || st.status === 'idle' ? (
-                    <button
-                      onClick={() => autoFetch(code)}
-                      className="text-[10px] text-blue-500 underline"
-                    >
-                      同步
-                    </button>
+                    <button onClick={() => autoFetch(code)} className="text-[10px] text-blue-500 underline">同步</button>
                   ) : st.status === 'loading' ? (
-                    <span className="text-[10px] text-slate-400 animate-pulse">同步中...</span>
+                    <span className="text-[10px] text-slate-400 animate-pulse">同步中…</span>
                   ) : st.status === 'done' ? (
-                    <span className="text-[10px] text-emerald-600">✓ {st.count} 筆</span>
+                    <span className="text-[10px] text-emerald-600">
+                      ✓ 新增 {st.count} 筆
+                      {st.skipped > 0 && <span className="text-slate-400 ml-1">（過濾 {st.skipped} 筆進場前）</span>}
+                    </span>
                   ) : (
                     <span className="text-[10px] text-amber-500">暫無資料</span>
                   )}
@@ -253,6 +402,8 @@ export default function DividendManager({
               )
             })}
           </div>
+        ) : (
+          <p className="text-xs text-slate-400">請先在「持倉管理」新增持倉，再來同步配息。</p>
         )}
       </div>
 
@@ -398,7 +549,7 @@ export default function DividendManager({
         <div className="text-center py-10 text-slate-400">
           <div className="text-3xl mb-2">💰</div>
           <p className="text-sm">尚無配息紀錄</p>
-          <p className="text-xs mt-1">點擊「一鍵同步」從 TWSE 自動抓取，或手動補登</p>
+          <p className="text-xs mt-1">確認進場日設定後，點擊「一鍵同步」從外部自動抓取，或手動補登</p>
         </div>
       )}
     </div>

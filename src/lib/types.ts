@@ -169,6 +169,7 @@ export interface PortfolioStore {
   transactions: Transaction[]
   snapshots: PnLSnapshot[]
   dividends: DividendRecord[]         // ETF 配息紀錄
+  dividendEntryDates: Record<string, string>  // key: `${accountId}_${code}`, value: YYYY-MM-DD
   allocationConfigs: AllocationConfig[]  // 目標配置清單
   settings: RebalanceSettings
   lastUpdated: string                 // ISO datetime

@@ -56,6 +56,7 @@ function buildDefaultStore(): PortfolioStore {
     transactions: [],
     snapshots: [],
     dividends: [],
+    dividendEntryDates: {},
     allocationConfigs: [{ ...DEFAULT_ALLOCATION_CONFIG, nextRebalanceDate: calcNextRebalanceDate(3, 1) }],
     settings: DEFAULT_SETTINGS,
     lastUpdated: new Date().toISOString(),
@@ -104,6 +105,7 @@ function migrateStore(parsed: Record<string, unknown>): PortfolioStore {
     transactions: p.transactions ?? [],
     snapshots: p.snapshots ?? [],
     dividends: p.dividends ?? [],
+    dividendEntryDates: p.dividendEntryDates ?? {},
     allocationConfigs,
     settings: newSettings,
     lastUpdated: p.lastUpdated ?? new Date().toISOString(),
@@ -406,15 +408,30 @@ export function addDividend(
   store: PortfolioStore,
   record: Omit<DividendRecord, 'id'>
 ): PortfolioStore {
+  // Dedup key: accountId + code + exDate (regardless of source).
+  // If any record already exists for this combination, SKIP — never overwrite.
+  const exists = store.dividends.some(
+    (d) => d.accountId === record.accountId && d.code === record.code && d.exDate === record.exDate
+  )
+  if (exists) return store
   const newRecord: DividendRecord = {
     ...record,
     id: `div_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
   }
-  // Deduplicate: same accountId + code + exDate of same source -> overwrite
-  const filtered = store.dividends.filter(
-    (d) => !(d.accountId === record.accountId && d.code === record.code && d.exDate === record.exDate && d.source === record.source)
-  )
-  return { ...store, dividends: [...filtered, newRecord] }
+  return { ...store, dividends: [...store.dividends, newRecord] }
+}
+
+export function setDividendEntryDate(
+  store: PortfolioStore,
+  accountId: string,
+  code: string,
+  date: string
+): PortfolioStore {
+  const key = `${accountId}_${code}`
+  return {
+    ...store,
+    dividendEntryDates: { ...store.dividendEntryDates, [key]: date },
+  }
 }
 
 export function deleteDividend(store: PortfolioStore, id: string): PortfolioStore {
