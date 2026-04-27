@@ -6,7 +6,7 @@
  */
 
 import React, { useMemo } from 'react'
-import { Account, Holding, PriceCache, TargetWeight, PnLSnapshot } from '@/lib/types'
+import { Account, Holding, PriceCache, TargetWeight, PnLSnapshot, Transaction } from '@/lib/types'
 import { calcAccountPnL, calcCombinedPnL } from '@/lib/rebalance-calculator'
 import { formatMoney } from '@/lib/calculator'
 import { accountColorStyle } from './AccountManager'
@@ -16,6 +16,7 @@ import AccountCharts from './AccountCharts'
 interface Props {
   accounts: Account[]
   holdings: Holding[]
+  transactions: Transaction[]
   prices: Record<string, PriceCache>
   targetWeights: TargetWeight[]
   snapshots: PnLSnapshot[]
@@ -60,6 +61,7 @@ function DeviationBar({ current, target }: { current: number; target: number }) 
 export default function PortfolioOverview({
   accounts,
   holdings,
+  transactions,
   prices,
   targetWeights,
   snapshots,
@@ -69,17 +71,17 @@ export default function PortfolioOverview({
   const [selectedAccountId, setSelectedAccountId] = React.useState<string>('__all__')
 
   const combined = useMemo(
-    () => calcCombinedPnL(accounts.map((a) => a.id), holdings, prices, targetWeights),
-    [accounts, holdings, prices, targetWeights]
+    () => calcCombinedPnL(accounts.map((a) => a.id), holdings, prices, targetWeights, transactions),
+    [accounts, holdings, prices, targetWeights, transactions]
   )
 
   const accountPnLs = useMemo(
-    () => accounts.map((a) => ({ account: a, pnl: calcAccountPnL(a.id, holdings, prices, targetWeights) })),
-    [accounts, holdings, prices, targetWeights]
+    () => accounts.map((a) => ({ account: a, pnl: calcAccountPnL(a.id, holdings, prices, targetWeights, transactions) })),
+    [accounts, holdings, prices, targetWeights, transactions]
   )
 
   const displayPnL = selectedAccountId === '__all__'
-    ? { totalValue: combined.totalValue, totalCost: combined.totalCost, totalPnl: combined.totalPnl, pnlPct: combined.pnlPct, holdings: combined.byAccount.flatMap((a) => a.holdings) }
+    ? { totalValue: combined.totalValue, totalCost: combined.totalCost, totalFees: combined.totalFees, totalPnl: combined.totalPnl, pnlPct: combined.pnlPct, holdings: combined.byAccount.flatMap((a) => a.holdings) }
     : accountPnLs.find((a) => a.account.id === selectedAccountId)?.pnl
 
   if (accounts.length === 0) {
@@ -143,10 +145,10 @@ export default function PortfolioOverview({
               color: displayPnL.totalPnl >= 0 ? 'text-green-600' : 'text-red-500',
             },
             {
-              label: '未實現損益%',
-              value: `${displayPnL.pnlPct >= 0 ? '+' : ''}${displayPnL.pnlPct.toFixed(2)}%`,
+              label: '已付手續費',
+              value: displayPnL.totalFees > 0 ? `-$${formatMoney(displayPnL.totalFees)}` : '$0',
               sub: '',
-              color: displayPnL.pnlPct >= 0 ? 'text-green-600' : 'text-red-500',
+              color: displayPnL.totalFees > 0 ? 'text-orange-500' : 'text-slate-400',
             },
           ].map((card) => (
             <div key={card.label} className="bg-slate-50 rounded-xl p-3 border border-slate-100">

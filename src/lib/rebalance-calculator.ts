@@ -6,6 +6,7 @@
 import {
   Holding,
   TargetWeight,
+  Transaction,
   DeviationInvestResult,
   DeviationInvestSummary,
   RebalanceAction,
@@ -298,6 +299,7 @@ export interface AccountPnL {
   accountId: string
   totalCost: number
   totalValue: number
+  totalFees: number
   totalPnl: number
   pnlPct: number
   holdings: {
@@ -320,7 +322,8 @@ export function calcAccountPnL(
   accountId: string,
   holdings: Holding[],
   prices: Record<string, PriceCache>,
-  targetWeights: TargetWeight[]
+  targetWeights: TargetWeight[],
+  transactions: Transaction[] = []
 ): AccountPnL {
   const acctHoldings = holdings.filter((h) => h.accountId === accountId)
 
@@ -357,10 +360,15 @@ export function calcAccountPnL(
     }
   })
 
+  const totalFees = transactions
+    .filter((t) => t.accountId === accountId && t.type === 'buy')
+    .reduce((s, t) => s + t.fee, 0)
+
   return {
     accountId,
     totalCost,
     totalValue,
+    totalFees,
     totalPnl: totalValue - totalCost,
     pnlPct: totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0,
     holdings: holdingDetails,
@@ -370,6 +378,7 @@ export function calcAccountPnL(
 export interface CombinedPnL {
   totalCost: number
   totalValue: number
+  totalFees: number
   totalPnl: number
   pnlPct: number
   byAccount: AccountPnL[]
@@ -379,17 +388,20 @@ export function calcCombinedPnL(
   accountIds: string[],
   holdings: Holding[],
   prices: Record<string, PriceCache>,
-  targetWeights: TargetWeight[]
+  targetWeights: TargetWeight[],
+  transactions: Transaction[] = []
 ): CombinedPnL {
   const byAccount = accountIds.map((id) =>
-    calcAccountPnL(id, holdings, prices, targetWeights)
+    calcAccountPnL(id, holdings, prices, targetWeights, transactions)
   )
   const totalCost = byAccount.reduce((s, a) => s + a.totalCost, 0)
   const totalValue = byAccount.reduce((s, a) => s + a.totalValue, 0)
+  const totalFees = byAccount.reduce((s, a) => s + a.totalFees, 0)
   const totalPnl = totalValue - totalCost
   return {
     totalCost,
     totalValue,
+    totalFees,
     totalPnl,
     pnlPct: totalCost > 0 ? (totalPnl / totalCost) * 100 : 0,
     byAccount,

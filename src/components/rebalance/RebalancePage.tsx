@@ -146,6 +146,7 @@ export default function RebalancePage() {
         <PortfolioOverview
           accounts={store.accounts}
           holdings={store.holdings}
+          transactions={store.transactions}
           prices={prices}
           targetWeights={store.settings.targetWeights}
           snapshots={store.snapshots}
