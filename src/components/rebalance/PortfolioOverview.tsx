@@ -139,7 +139,7 @@ export default function PortfolioOverview({
             { label: '總市值', value: `$${formatMoney(displayPnL.totalValue)}`, sub: '' },
             { label: '總成本', value: `$${formatMoney(displayPnL.totalCost)}`, sub: displayPnL.totalFees > 0 ? `含手續費 $${formatMoney(displayPnL.totalFees)}` : '' },
             {
-              label: '損益（含費）',
+              label: '預估損益',
               value: `${displayPnL.totalPnl >= 0 ? '+' : ''}$${formatMoney(Math.abs(displayPnL.totalPnl))}`,
               sub: `${displayPnL.pnlPct >= 0 ? '+' : ''}${displayPnL.pnlPct.toFixed(2)}%`,
               color: displayPnL.totalPnl >= 0 ? 'text-green-600' : 'text-red-500',

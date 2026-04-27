@@ -318,6 +318,16 @@ export interface AccountPnL {
   }[]
 }
 
+/** 預估賣出費用 = 手續費（floor）+ 交易稅（floor）
+ *  ETF 交易稅 0.1%；一般股票 0.3%
+ *  手續費率固定 0.1425%（不套用折扣，與券商預估口徑一致）
+ */
+function estimateSellFee(value: number, isETF: boolean): number {
+  const brokerage = Math.floor(value * 0.001425)
+  const tax = Math.floor(value * (isETF ? 0.001 : 0.003))
+  return brokerage + tax
+}
+
 export function calcAccountPnL(
   accountId: string,
   holdings: Holding[],
@@ -339,7 +349,8 @@ export function calcAccountPnL(
     const price = prices[h.code]?.price ?? 0
     const value = h.shares * price
     const cost = h.shares * h.avgCost
-    const pnl = value - cost
+    const sellFee = price > 0 ? estimateSellFee(value, h.isETF) : 0
+    const pnl = value - sellFee - cost
     const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0
     const currentWeight = safePct(value, totalValue)
     const tw = targetWeights.find((t) => t.code === h.code)
@@ -364,13 +375,15 @@ export function calcAccountPnL(
     .filter((t) => t.accountId === accountId && t.type === 'buy')
     .reduce((s, t) => s + t.fee, 0)
 
+  const totalPnl = holdingDetails.reduce((s, d) => s + d.pnl, 0)
+
   return {
     accountId,
     totalCost,
     totalValue,
     totalFees,
-    totalPnl: totalValue - totalCost,
-    pnlPct: totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0,
+    totalPnl,
+    pnlPct: totalCost > 0 ? (totalPnl / totalCost) * 100 : 0,
     holdings: holdingDetails,
   }
 }
@@ -397,7 +410,7 @@ export function calcCombinedPnL(
   const totalCost = byAccount.reduce((s, a) => s + a.totalCost, 0)
   const totalValue = byAccount.reduce((s, a) => s + a.totalValue, 0)
   const totalFees = byAccount.reduce((s, a) => s + a.totalFees, 0)
-  const totalPnl = totalValue - totalCost
+  const totalPnl = byAccount.reduce((s, a) => s + a.totalPnl, 0)
   return {
     totalCost,
     totalValue,
