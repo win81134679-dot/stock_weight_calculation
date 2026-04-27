@@ -137,18 +137,18 @@ export default function PortfolioOverview({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: '總市值', value: `$${formatMoney(displayPnL.totalValue)}`, sub: '' },
-            { label: '總成本', value: `$${formatMoney(displayPnL.totalCost)}`, sub: '' },
+            { label: '總成本', value: `$${formatMoney(displayPnL.totalCost)}`, sub: displayPnL.totalFees > 0 ? `含手續費 $${formatMoney(displayPnL.totalFees)}` : '' },
             {
-              label: '損益',
+              label: '損益（含費）',
               value: `${displayPnL.totalPnl >= 0 ? '+' : ''}$${formatMoney(Math.abs(displayPnL.totalPnl))}`,
               sub: `${displayPnL.pnlPct >= 0 ? '+' : ''}${displayPnL.pnlPct.toFixed(2)}%`,
               color: displayPnL.totalPnl >= 0 ? 'text-green-600' : 'text-red-500',
             },
             {
-              label: '已付手續費',
-              value: displayPnL.totalFees > 0 ? `-$${formatMoney(displayPnL.totalFees)}` : '$0',
+              label: '未實現損益%',
+              value: `${displayPnL.pnlPct >= 0 ? '+' : ''}${displayPnL.pnlPct.toFixed(2)}%`,
               sub: '',
-              color: displayPnL.totalFees > 0 ? 'text-orange-500' : 'text-slate-400',
+              color: displayPnL.pnlPct >= 0 ? 'text-green-600' : 'text-red-500',
             },
           ].map((card) => (
             <div key={card.label} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
@@ -158,6 +158,13 @@ export default function PortfolioOverview({
             </div>
           ))}
         </div>
+      )}
+
+      {/* Disclaimer: delayed price */}
+      {displayPnL && (
+        <p className="text-xs text-slate-400 px-1">
+          ※ 股價為 TWSE 延遲約 20 秒報價，與券商即時報價可能有落差，損益數字僅供參考。
+        </p>
       )}
 
       {/* Holdings deviation table */}
