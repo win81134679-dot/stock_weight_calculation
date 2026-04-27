@@ -21,9 +21,9 @@ const STORAGE_KEY = 'portfolio-store-v1'
 // ============================================================
 
 const DEFAULT_TARGET_WEIGHTS: TargetWeight[] = [
-  { code: '00927',  name: '群益半導體收益',    exchange: 'tse', isETF: true, weight: 60 },
-  { code: '00988A', name: '主動統一全球創新',  exchange: 'tse', isETF: true, weight: 20 },
-  { code: '00997A', name: '主動群益美國增長',  exchange: 'tse', isETF: true, weight: 20 },
+  { code: '0050',   name: '元大台灣50',          exchange: 'tse', isETF: true, weight: 40 },
+  { code: '00927',  name: '群益半導體收益',    exchange: 'tse', isETF: true, weight: 20 },
+  { code: '00988A', name: '主動統一全球創新',  exchange: 'tse', isETF: true, weight: 40 },
 ]
 
 const DEFAULT_SETTINGS: RebalanceSettings = {

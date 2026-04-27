@@ -10,9 +10,9 @@ export interface StockConfig {
 
 /** 預設股票配置 */
 export const DEFAULT_STOCKS: StockConfig[] = [
-  { code: '00927',  weight: 60 },
-  { code: '00988A', weight: 20 },
-  { code: '00997A', weight: 20 },
+  { code: '0050',   weight: 40 },
+  { code: '00927',  weight: 20 },
+  { code: '00988A', weight: 40 },
 ]
 
 /** 手續費折扣（10 = 不打折 = 原價, 6 = 6折） */
