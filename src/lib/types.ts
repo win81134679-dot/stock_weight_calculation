@@ -160,6 +160,7 @@ export interface PortfolioStore {
   holdings: Holding[]
   transactions: Transaction[]
   snapshots: PnLSnapshot[]
+  dividends: DividendRecord[]         // ETF 配息紀錄
   settings: RebalanceSettings
   lastUpdated: string                 // ISO datetime
 }
@@ -174,6 +175,21 @@ export interface PriceCache {
   isETF: boolean
   fetchedAt: number                   // Date.now()
   isMarketOpen: boolean               // z 欄位有效時為 true（盤中），否則為 false（盤後/未開盤）
+  high52w?: number                    // 近 52 週最高價（背景載入）
+  low52w?: number                     // 近 52 週最低價（背景載入）
+}
+
+/** ETF 配息紀錄 */
+export interface DividendRecord {
+  id: string
+  accountId: string
+  code: string
+  exDate: string                      // 除息日 'YYYY-MM-DD'
+  cashPerShare: number                // 每股配息金額
+  shares: number                      // 除息時持股數（用於計算總領息）
+  totalCash: number                   // 總領息 = cashPerShare × shares
+  source: 'auto' | 'manual'          // 自動抓取或手動輸入
+  note?: string
 }
 
 /** 偏差修正投入試算 — 單標的結果 */

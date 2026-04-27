@@ -55,7 +55,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6]">
-      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-10 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
         {/* Header */}
         <div className="bg-[#2C5F8A] rounded-2xl p-4 sm:p-6 shadow-lg">

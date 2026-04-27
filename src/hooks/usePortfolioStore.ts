@@ -15,6 +15,7 @@ import {
   RebalanceSettings,
   TargetWeight,
   PnLSnapshot,
+  DividendRecord,
 } from '@/lib/types'
 import {
   loadStore,
@@ -30,6 +31,9 @@ import {
   addTargetWeight,
   removeTargetWeight,
   addSnapshot,
+  addDividend,
+  deleteDividend,
+  bulkUpsertDividends,
   exportStoreAsJSON,
   importStoreFromJSON,
 } from '@/lib/portfolio-store'
@@ -103,7 +107,19 @@ export function usePortfolioStore() {
   const handleAddSnapshot = useCallback((snapshot: PnLSnapshot) => {
     setStore((s) => addSnapshot(s, snapshot))
   }, [])
+  // ── Dividends ──────────────────────────────────────────────────
 
+  const handleAddDividend = useCallback((record: Omit<DividendRecord, 'id'>) => {
+    setStore((s) => addDividend(s, record))
+  }, [])
+
+  const handleDeleteDividend = useCallback((id: string) => {
+    setStore((s) => deleteDividend(s, id))
+  }, [])
+
+  const handleBulkUpsertDividends = useCallback((records: Omit<DividendRecord, 'id'>[]) => {
+    setStore((s) => bulkUpsertDividends(s, records))
+  }, [])
   // ── Import / Export ───────────────────────────────────────
 
   const handleExport = useCallback((): string => {
@@ -136,6 +152,10 @@ export function usePortfolioStore() {
     removeTargetWeight: handleRemoveTargetWeight,
     // Snapshots
     addSnapshot: handleAddSnapshot,
+    // Dividends
+    addDividend: handleAddDividend,
+    deleteDividend: handleDeleteDividend,
+    bulkUpsertDividends: handleBulkUpsertDividends,
     // I/O
     exportJSON: handleExport,
     importJSON: handleImport,

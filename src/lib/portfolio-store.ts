@@ -12,6 +12,7 @@ import {
   RebalanceSettings,
   PortfolioStore,
   TargetWeight,
+  DividendRecord,
 } from './types'
 
 const STORAGE_KEY = 'portfolio-store-v1'
@@ -48,6 +49,7 @@ function buildDefaultStore(): PortfolioStore {
     holdings: [],
     transactions: [],
     snapshots: [],
+    dividends: [],
     settings: DEFAULT_SETTINGS,
     lastUpdated: new Date().toISOString(),
   }
@@ -67,6 +69,7 @@ export function loadStore(): PortfolioStore {
     const merged: PortfolioStore = {
       ...buildDefaultStore(),
       ...parsed,
+      dividends: parsed.dividends ?? [],
       settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
     }
     return merged
@@ -288,8 +291,47 @@ export function importStoreFromJSON(json: string): PortfolioStore | null {
   try {
     const parsed = JSON.parse(json) as PortfolioStore
     if (!parsed.accounts || !parsed.settings) return null
-    return { ...buildDefaultStore(), ...parsed, settings: { ...DEFAULT_SETTINGS, ...parsed.settings } }
+    return {
+      ...buildDefaultStore(),
+      ...parsed,
+      dividends: parsed.dividends ?? [],
+      settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+    }
   } catch {
     return null
   }
+}
+
+// ============================================================
+// Dividends
+// ============================================================
+
+export function addDividend(
+  store: PortfolioStore,
+  record: Omit<DividendRecord, 'id'>
+): PortfolioStore {
+  const newRecord: DividendRecord = {
+    ...record,
+    id: `div_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+  }
+  // Deduplicate: same accountId + code + exDate of same source -> overwrite
+  const filtered = store.dividends.filter(
+    (d) => !(d.accountId === record.accountId && d.code === record.code && d.exDate === record.exDate && d.source === record.source)
+  )
+  return { ...store, dividends: [...filtered, newRecord] }
+}
+
+export function deleteDividend(store: PortfolioStore, id: string): PortfolioStore {
+  return { ...store, dividends: store.dividends.filter((d) => d.id !== id) }
+}
+
+export function bulkUpsertDividends(
+  store: PortfolioStore,
+  records: Omit<DividendRecord, 'id'>[]
+): PortfolioStore {
+  let s = store
+  for (const r of records) {
+    s = addDividend(s, r)
+  }
+  return s
 }

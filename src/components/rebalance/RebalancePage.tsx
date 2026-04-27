@@ -19,6 +19,7 @@ import QuarterlyRebalancer from './QuarterlyRebalancer'
 import HoldingEditor from './HoldingEditor'
 import AccountManager from './AccountManager'
 import RebalanceSettingsPanel from './RebalanceSettings'
+import DividendManager from './DividendManager'
 
 type SubTab = 'overview' | 'invest' | 'rebalance' | 'holdings' | 'settings'
 
@@ -32,7 +33,7 @@ const SUB_TABS: { id: SubTab; label: string; icon: string }[] = [
 
 export default function RebalancePage() {
   const [activeTab, setActiveTab] = useState<SubTab>('overview')
-  const [holdingsSubTab, setHoldingsSubTab] = useState<'editor' | 'accounts'>('editor')
+  const [holdingsSubTab, setHoldingsSubTab] = useState<'editor' | 'accounts' | 'dividends'>('editor')
 
   const {
     store,
@@ -42,10 +43,11 @@ export default function RebalancePage() {
     addTransaction, deleteTransaction,
     updateSettings, addTargetWeight, removeTargetWeight,
     addSnapshot,
+    addDividend, deleteDividend, bulkUpsertDividends,
     exportJSON, importJSON,
   } = usePortfolioStore()
 
-  const { prices, loading: pricesLoading, fetchPrices, refreshPrices } = useCurrentPrices()
+  const { prices, loading: pricesLoading, fetchPrices, refreshPrices, secondsUntilRefresh, isMarketHours: isMarketHoursNow, startAutoRefresh, stopAutoRefresh } = useCurrentPrices()
 
   // Collect all codes to track
   const uniqueCodes = useMemo(() => {
@@ -104,6 +106,15 @@ export default function RebalancePage() {
     refreshPrices(uniqueCodes)
   }, [refreshPrices, uniqueCodes])
 
+  // Auto-refresh prices when on overview tab using the hook's built-in auto-refresh
+  useEffect(() => {
+    if (activeTab === 'overview' && uniqueCodes.length > 0) {
+      startAutoRefresh(uniqueCodes)
+    }
+    return () => stopAutoRefresh()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, uniqueCodes.join(',')])
+
   // Auto-refresh prices when on invest tab: immediately on enter + every 60s
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
   useEffect(() => {
@@ -156,7 +167,11 @@ export default function RebalancePage() {
           prices={prices}
           targetWeights={store.settings.targetWeights}
           snapshots={store.snapshots}
+          dividends={store.dividends}
+          nextRebalanceDate={store.settings.nextRebalanceDate}
           loading={pricesLoading}
+          secondsUntilRefresh={secondsUntilRefresh}
+          isMarketHours={isMarketHoursNow}
           onRefreshPrices={handleRefreshPrices}
         />
       )}
@@ -222,6 +237,14 @@ export default function RebalancePage() {
             >
               🏦 帳戶管理
             </button>
+            <button
+              onClick={() => setHoldingsSubTab('dividends')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                holdingsSubTab === 'dividends' ? 'bg-white shadow text-[#2C5F8A]' : 'text-slate-500'
+              }`}
+            >
+              💰 配息紀錄
+            </button>
           </div>
 
           {holdingsSubTab === 'editor' && (
@@ -244,6 +267,20 @@ export default function RebalancePage() {
               onAdd={addAccount}
               onUpdate={updateAccount}
               onDelete={deleteAccount}
+            />
+          )}
+
+          {holdingsSubTab === 'dividends' && (
+            <DividendManager
+              accounts={store.accounts}
+              holdings={store.holdings}
+              dividends={store.dividends}
+              prices={Object.fromEntries(
+                Object.entries(prices).map(([code, pc]) => [code, { price: pc.price, avgCost: undefined }])
+              )}
+              onAddDividend={addDividend}
+              onDeleteDividend={deleteDividend}
+              onBulkUpsert={bulkUpsertDividends}
             />
           )}
         </div>
