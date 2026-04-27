@@ -6,7 +6,7 @@
  * Orchestrates all state via usePortfolioStore + useCurrentPrices.
  */
 
-import React, { useEffect, useCallback, useState, useMemo } from 'react'
+import React, { useEffect, useCallback, useState, useMemo, useRef } from 'react'
 import { usePortfolioStore } from '@/hooks/usePortfolioStore'
 import { useCurrentPrices } from '@/hooks/useCurrentPrices'
 import { takeAndSaveSnapshot } from '@/lib/snapshot'
@@ -103,6 +103,24 @@ export default function RebalancePage() {
     refreshPrices(uniqueCodes)
   }, [refreshPrices, uniqueCodes])
 
+  // Auto-refresh prices when on invest tab: immediately on enter + every 60s
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    if (activeTab === 'invest' && uniqueCodes.length > 0) {
+      refreshPrices(uniqueCodes)
+      autoRefreshRef.current = setInterval(() => {
+        refreshPrices(uniqueCodes)
+      }, 60_000)
+    }
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current)
+        autoRefreshRef.current = null
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
   return (
     <div className="space-y-4">
       {/* Sub-tab navigation */}
@@ -137,13 +155,32 @@ export default function RebalancePage() {
       )}
 
       {activeTab === 'invest' && (
-        <InvestmentAdvisor
-          accounts={store.accounts}
-          holdings={store.holdings}
-          prices={prices}
-          targetWeights={store.settings.targetWeights}
-          discount={store.settings.discount}
-        />
+        <div className="space-y-2">
+          {/* Refresh status bar */}
+          <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+            <span>
+              {pricesLoading
+                ? '🔄 更新股價中…'
+                : Object.keys(prices).length > 0
+                  ? `✅ 股價已更新　每 60 秒自動刷新`
+                  : '股價載入中…'}
+            </span>
+            <button
+              onClick={handleRefreshPrices}
+              disabled={pricesLoading}
+              className="text-[#4A90C4] hover:text-[#2C5F8A] disabled:opacity-40 font-medium"
+            >
+              立即刷新
+            </button>
+          </div>
+          <InvestmentAdvisor
+            accounts={store.accounts}
+            holdings={store.holdings}
+            prices={prices}
+            targetWeights={store.settings.targetWeights}
+            discount={store.settings.discount}
+          />
+        </div>
       )}
 
       {activeTab === 'rebalance' && (
