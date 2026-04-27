@@ -51,11 +51,11 @@ export default function RebalancePage() {
 
   const { prices, loading: pricesLoading, fetchPrices, refreshPrices, secondsUntilRefresh, isMarketHours: isMarketHoursNow, startAutoRefresh, stopAutoRefresh } = useCurrentPrices()
 
-  // Collect all codes to track
+  // Collect all codes to track (tse_t00.tw = 加權指數)
   const uniqueCodes = useMemo(() => {
     const configCodes = store.allocationConfigs.flatMap((c) => c.targetWeights.map((t) => t.code))
     const holdingCodes = store.holdings.map((h) => h.code)
-    return Array.from(new Set([...configCodes, ...holdingCodes]))
+    return Array.from(new Set([...configCodes, ...holdingCodes, 'tse_t00.tw']))
   }, [store.allocationConfigs, store.holdings])
 
   // Fetch prices on mount and when tracked codes change
