@@ -36,11 +36,19 @@ import {
 
 export function usePortfolioStore() {
   const [store, setStore] = useState<PortfolioStore>(() => loadStore())
+  const [mounted, setMounted] = useState(false)
 
-  // Persist to localStorage whenever store changes
+  // 第一次在 client 掛載後從 localStorage 讀取真實資料，避免 SSR hydration 不一致
   useEffect(() => {
+    setStore(loadStore())
+    setMounted(true)
+  }, [])
+
+  // Persist to localStorage whenever store changes (mounted 後才存)
+  useEffect(() => {
+    if (!mounted) return
     saveStore(store)
-  }, [store])
+  }, [store, mounted])
 
   // ── Accounts ──────────────────────────────────────────────
 
@@ -111,6 +119,7 @@ export function usePortfolioStore() {
 
   return {
     store,
+    mounted,
     // Accounts
     addAccount: handleAddAccount,
     updateAccount: handleUpdateAccount,

@@ -36,6 +36,7 @@ export default function RebalancePage() {
 
   const {
     store,
+    mounted,
     addAccount, updateAccount, deleteAccount,
     upsertHolding, deleteHolding,
     addTransaction, deleteTransaction,
@@ -120,6 +121,11 @@ export default function RebalancePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
+
+  // SSR hydration 完成前不渲染（避免 localStorage 資料造成 mismatch）
+  if (!mounted) {
+    return <div className="h-32 rounded-2xl bg-slate-100 animate-pulse" />
+  }
 
   return (
     <div className="space-y-4">
