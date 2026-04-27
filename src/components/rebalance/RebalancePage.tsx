@@ -168,9 +168,10 @@ export default function RebalancePage() {
             <button
               onClick={handleRefreshPrices}
               disabled={pricesLoading}
-              className="text-[#4A90C4] hover:text-[#2C5F8A] disabled:opacity-40 font-medium"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#2C5F8A] text-white hover:bg-[#4A90C4] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
             >
-              立即刷新
+              <span className={pricesLoading ? 'animate-spin' : ''}>🔄</span>
+              <span>{pricesLoading ? '更新中…' : '刷新股價'}</span>
             </button>
           </div>
           <InvestmentAdvisor
