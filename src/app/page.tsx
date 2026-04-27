@@ -9,6 +9,7 @@ import TopUpCalculator from '@/components/TopUpCalculator'
 import RebalancePage from '@/components/rebalance/RebalancePage'
 import { calculatePortfolio, formatMoney, calcMinFund } from '@/lib/calculator'
 import { PortfolioResult } from '@/lib/types'
+import { usePortfolioStore } from '@/hooks/usePortfolioStore'
 import {
   DEFAULT_STOCKS,
   DEFAULT_DISCOUNT,
@@ -115,7 +116,81 @@ function PortfolioCalculatorPage() {
   const [totalFund, setTotalFund] = useState<number>(0)
   const [discount, setDiscount] = useState<number>(DEFAULT_DISCOUNT)
   const [rebalanceDate, setRebalanceDate] = useState<string>(DEFAULT_REBALANCE_DATE)
+  const [selectedConfigId, setSelectedConfigId] = useState<string>('')
+  const [applyFlash, setApplyFlash] = useState(false)
   const hasFetched = useRef(false)
+  const { store } = usePortfolioStore()
+  const allocationConfigs = store.allocationConfigs
+
+  // --- 套用目標配置 ---
+  const applyConfig = useCallback(
+    async (configId: string) => {
+      const config = allocationConfigs.find((c) => c.id === configId)
+      if (!config) return
+
+      const tw = config.targetWeights
+      const rowCount = Math.max(tw.length, 4)
+      const newStocks: StockRow[] = Array.from({ length: rowCount }, (_, i) => {
+        const t = tw[i]
+        if (t) {
+          return {
+            code: t.code,
+            name: t.name ?? '',
+            price: 0,
+            weight: t.weight,
+            isETF: t.isETF ?? false,
+            exchange: t.exchange ?? 'tse',
+            loading: true,
+            error: '',
+            hold: false,
+          }
+        }
+        return { code: '', name: '', price: 0, weight: 0, isETF: false, exchange: 'tse', loading: false, error: '', hold: false }
+      })
+      setStocks(newStocks)
+      setApplyFlash(true)
+      setTimeout(() => setApplyFlash(false), 1200)
+
+      // 批次查詢股價
+      const indicesToFetch = newStocks
+        .map((s, i) => (s.code.trim() ? i : -1))
+        .filter((i) => i >= 0)
+
+      const results = await Promise.all(
+        indicesToFetch.map(async (i) => {
+          const code = newStocks[i].code.trim()
+          const knownExchange = newStocks[i].exchange
+          const exchanges = (knownExchange ? [knownExchange, ...((['tse', 'otc'] as const).filter((e) => e !== knownExchange))] : ['tse', 'otc']) as ('tse' | 'otc')[]
+          for (const ex of exchanges) {
+            try {
+              const param = `${ex}_${code}.tw`
+              const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(param)}`)
+              const data = await res.json()
+              if (data.msgArray && data.msgArray.length > 0) {
+                const info = data.msgArray[0]
+                const price = parseFloat(info.z)
+                const fallbackPrice = parseFloat(info.y)
+                const actualPrice = !isNaN(price) && price > 0 ? price : fallbackPrice
+                if (!isNaN(actualPrice) && actualPrice > 0) {
+                  return { i, partial: { name: info.n?.trim() || code, price: actualPrice, isETF: code.startsWith('00') && code.length >= 4, exchange: ex, loading: false, error: '' } }
+                }
+              }
+            } catch { /* continue */ }
+          }
+          return { i, partial: { loading: false, error: '查詢失敗' } }
+        })
+      )
+
+      setStocks((prev) => {
+        const next = [...prev]
+        results.forEach(({ i, partial }) => {
+          next[i] = { ...next[i], ...partial }
+        })
+        return next
+      })
+    },
+    [allocationConfigs]
+  )
 
   // --- 自動查詢 config 中有代碼的股票 ---
   const fetchStockPrice = useCallback(
@@ -229,6 +304,45 @@ function PortfolioCalculatorPage() {
           </span>
         ) : undefined
       }>
+        {/* 快速套用目標配置 */}
+        {allocationConfigs.length > 0 && (
+          <div className={`mb-3 flex flex-wrap items-center gap-2 p-3 rounded-xl border transition-colors duration-500 ${applyFlash ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}`}>
+            <span className="text-xs font-semibold text-slate-500 shrink-0">🎯 套用目標配置</span>
+            {allocationConfigs.length === 1 ? (
+              <button
+                onClick={() => applyConfig(allocationConfigs[0].id)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-[#2C5F8A] text-white font-medium hover:bg-[#1e4a6f] transition-colors"
+              >
+                {allocationConfigs[0].name} ({allocationConfigs[0].targetWeights.length} 支)
+              </button>
+            ) : (
+              <>
+                <select
+                  value={selectedConfigId}
+                  onChange={(e) => setSelectedConfigId(e.target.value)}
+                  className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                >
+                  <option value="">選擇配置…</option>
+                  {allocationConfigs.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.targetWeights.length} 支)
+                    </option>
+                  ))}
+                </select>
+                <button
+                  disabled={!selectedConfigId}
+                  onClick={() => { if (selectedConfigId) applyConfig(selectedConfigId) }}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-[#2C5F8A] text-white font-medium hover:bg-[#1e4a6f] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  套用
+                </button>
+              </>
+            )}
+            {applyFlash && (
+              <span className="text-xs text-emerald-600 font-medium">✓ 已套用，查詢股價中…</span>
+            )}
+          </div>
+        )}
         <StockInput stocks={stocks} onStocksChange={setStocks} />
         {totalWeight > 100.01 && (
           <div className="mt-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm text-red-600">
