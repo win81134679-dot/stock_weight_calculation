@@ -7,17 +7,18 @@
  */
 
 import React, { useState, useMemo } from 'react'
-import { Account, Holding, PriceCache, TargetWeight } from '@/lib/types'
+import { Account, Holding, PriceCache, AllocationConfig } from '@/lib/types'
 import { calcDeviationInvestment } from '@/lib/rebalance-calculator'
 import { formatMoney } from '@/lib/calculator'
 import { accountColorStyle } from './AccountManager'
 import InjectionScenarioChart from './InjectionScenarioChart'
+import { resolveAccountConfig } from '@/lib/portfolio-store'
 
 interface Props {
   accounts: Account[]
   holdings: Holding[]
   prices: Record<string, PriceCache>
-  targetWeights: TargetWeight[]
+  allocationConfigs: AllocationConfig[]
   discount: number
 }
 
@@ -27,12 +28,16 @@ export default function InvestmentAdvisor({
   accounts,
   holdings,
   prices,
-  targetWeights,
+  allocationConfigs,
   discount,
 }: Props) {
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id ?? '')
   const [investAmount, setInvestAmount] = useState<number>(10000)
   const [inputStr, setInputStr] = useState<string>('10000')
+
+  const account = accounts.find((a) => a.id === selectedAccountId)
+  const targetWeights = account ? resolveAccountConfig(account, allocationConfigs).targetWeights : []
+  const configName = account ? resolveAccountConfig(account, allocationConfigs).name : ''
 
   const result = useMemo(() => {
     if (!selectedAccountId || investAmount <= 0 || targetWeights.length === 0) return null
@@ -60,7 +65,6 @@ export default function InvestmentAdvisor({
     )
   }
 
-  const account = accounts.find((a) => a.id === selectedAccountId)
   const style = account ? accountColorStyle(account.color) : accountColorStyle('blue')
 
   // Current account total value for context
@@ -93,6 +97,9 @@ export default function InvestmentAdvisor({
             )
           })}
         </div>
+        {configName && (
+          <p className="mt-1.5 text-[11px] text-slate-400">使用配置：<span className="font-semibold text-[#2C5F8A]">{configName}</span></p>
+        )}
       </div>
 
       {/* Amount input */}

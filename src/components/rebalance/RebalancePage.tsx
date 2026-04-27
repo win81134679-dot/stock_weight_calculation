@@ -20,6 +20,7 @@ import HoldingEditor from './HoldingEditor'
 import AccountManager from './AccountManager'
 import RebalanceSettingsPanel from './RebalanceSettings'
 import DividendManager from './DividendManager'
+import AllocationConfigManager from './AllocationConfigManager'
 
 type SubTab = 'overview' | 'invest' | 'rebalance' | 'holdings' | 'settings'
 
@@ -33,7 +34,7 @@ const SUB_TABS: { id: SubTab; label: string; icon: string }[] = [
 
 export default function RebalancePage() {
   const [activeTab, setActiveTab] = useState<SubTab>('overview')
-  const [holdingsSubTab, setHoldingsSubTab] = useState<'editor' | 'accounts' | 'dividends'>('editor')
+  const [holdingsSubTab, setHoldingsSubTab] = useState<'editor' | 'accounts' | 'dividends' | 'configs'>('editor')
 
   const {
     store,
@@ -41,7 +42,8 @@ export default function RebalancePage() {
     addAccount, updateAccount, deleteAccount,
     upsertHolding, deleteHolding,
     addTransaction, deleteTransaction,
-    updateSettings, addTargetWeight, removeTargetWeight,
+    updateSettings,
+    addAllocationConfig, updateAllocationConfig, deleteAllocationConfig, duplicateAllocationConfig, setAccountAllocationConfig,
     addSnapshot,
     addDividend, deleteDividend, bulkUpsertDividends,
     exportJSON, importJSON,
@@ -51,12 +53,10 @@ export default function RebalancePage() {
 
   // Collect all codes to track
   const uniqueCodes = useMemo(() => {
-    const all = [
-      ...store.settings.targetWeights.map((t) => t.code),
-      ...store.holdings.map((h) => h.code),
-    ]
-    return Array.from(new Set(all))
-  }, [store.settings.targetWeights, store.holdings])
+    const configCodes = store.allocationConfigs.flatMap((c) => c.targetWeights.map((t) => t.code))
+    const holdingCodes = store.holdings.map((h) => h.code)
+    return Array.from(new Set([...configCodes, ...holdingCodes]))
+  }, [store.allocationConfigs, store.holdings])
 
   // Fetch prices on mount and when tracked codes change
   useEffect(() => {
@@ -80,13 +80,15 @@ export default function RebalancePage() {
   // Discord notification check on page load
   useEffect(() => {
     if (store.settings.discordWebhookUrl && store.accounts.length > 0) {
+      const firstConfig = store.allocationConfigs[0]
+      if (!firstConfig) return
       const combined = calcCombinedPnL(
         store.accounts.map((a) => a.id),
         store.holdings,
         prices,
-        store.settings.targetWeights
+        firstConfig.targetWeights
       )
-      const deviations = store.settings.targetWeights.map((tw) => {
+      const deviations = firstConfig.targetWeights.map((tw) => {
         const holding = store.holdings.find((h) => h.code === tw.code)
         const price = prices[tw.code]?.price ?? 0
         const totalVal = store.holdings.reduce(
@@ -97,7 +99,7 @@ export default function RebalancePage() {
           : 0
         return { name: tw.name, deviation: currentPct - tw.weight }
       })
-      checkAndNotifyOnLoad(store.settings, combined.pnlPct, deviations)
+      checkAndNotifyOnLoad(store.settings, combined.pnlPct, deviations, firstConfig.nextRebalanceDate)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // only on mount
@@ -165,10 +167,9 @@ export default function RebalancePage() {
           holdings={store.holdings}
           transactions={store.transactions}
           prices={prices}
-          targetWeights={store.settings.targetWeights}
+          allocationConfigs={store.allocationConfigs}
           snapshots={store.snapshots}
           dividends={store.dividends}
-          nextRebalanceDate={store.settings.nextRebalanceDate}
           loading={pricesLoading}
           secondsUntilRefresh={secondsUntilRefresh}
           isMarketHours={isMarketHoursNow}
@@ -200,7 +201,7 @@ export default function RebalancePage() {
             accounts={store.accounts}
             holdings={store.holdings}
             prices={prices}
-            targetWeights={store.settings.targetWeights}
+            allocationConfigs={store.allocationConfigs}
             discount={store.settings.discount}
           />
         </div>
@@ -211,8 +212,7 @@ export default function RebalancePage() {
           accounts={store.accounts}
           holdings={store.holdings}
           prices={prices}
-          targetWeights={store.settings.targetWeights}
-          nextRebalanceDate={store.settings.nextRebalanceDate}
+          allocationConfigs={store.allocationConfigs}
           discount={store.settings.discount}
         />
       )}
@@ -220,7 +220,7 @@ export default function RebalancePage() {
       {activeTab === 'holdings' && (
         <div className="space-y-4">
           {/* Holdings sub-tabs */}
-          <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
+          <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit flex-wrap">
             <button
               onClick={() => setHoldingsSubTab('editor')}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -245,6 +245,14 @@ export default function RebalancePage() {
             >
               💰 配息紀錄
             </button>
+            <button
+              onClick={() => setHoldingsSubTab('configs')}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                holdingsSubTab === 'configs' ? 'bg-white shadow text-[#2C5F8A]' : 'text-slate-500'
+              }`}
+            >
+              🎯 配置管理
+            </button>
           </div>
 
           {holdingsSubTab === 'editor' && (
@@ -253,7 +261,7 @@ export default function RebalancePage() {
               holdings={store.holdings}
               transactions={store.transactions}
               prices={prices}
-              targetWeights={store.settings.targetWeights}
+              allocationConfigs={store.allocationConfigs}
               onUpsertHolding={upsertHolding}
               onDeleteHolding={deleteHolding}
               onAddTransaction={addTransaction}
@@ -264,9 +272,11 @@ export default function RebalancePage() {
           {holdingsSubTab === 'accounts' && (
             <AccountManager
               accounts={store.accounts}
+              allocationConfigs={store.allocationConfigs}
               onAdd={addAccount}
               onUpdate={updateAccount}
               onDelete={deleteAccount}
+              onSetAllocationConfig={setAccountAllocationConfig}
             />
           )}
 
@@ -283,6 +293,17 @@ export default function RebalancePage() {
               onBulkUpsert={bulkUpsertDividends}
             />
           )}
+
+          {holdingsSubTab === 'configs' && (
+            <AllocationConfigManager
+              configs={store.allocationConfigs}
+              accounts={store.accounts}
+              onAdd={addAllocationConfig}
+              onUpdate={updateAllocationConfig}
+              onDelete={deleteAllocationConfig}
+              onDuplicate={duplicateAllocationConfig}
+            />
+          )}
         </div>
       )}
 
@@ -290,8 +311,6 @@ export default function RebalancePage() {
         <RebalanceSettingsPanel
           settings={store.settings}
           onUpdateSettings={updateSettings}
-          onAddTargetWeight={addTargetWeight}
-          onRemoveTargetWeight={removeTargetWeight}
           onExportJSON={exportJSON}
           onImportJSON={importJSON}
         />

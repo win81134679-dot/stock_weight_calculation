@@ -89,6 +89,7 @@ export interface Account {
   name: string          // 例：「台新證券」
   color: string         // tailwind color key: 'blue'|'green'|'yellow'|'purple'|'pink'
   broker?: string       // 券商名稱（選填）
+  allocationConfigId?: string  // 使用的目標配置 ID（undefined 表示使用第一個配置）
 }
 
 /** 持倉摘要（快速模式，每帳戶每 ETF 一筆） */
@@ -124,12 +125,19 @@ export interface TargetWeight {
   weight: number        // 0-100，加總需等於 100
 }
 
-/** 再平衡設定 */
-export interface RebalanceSettings {
+/** 一個目標配置，包含標的清單與專屬再平衡排程 */
+export interface AllocationConfig {
+  id: string
+  name: string
+  description?: string
   targetWeights: TargetWeight[]
   rebalanceIntervalMonths: number     // 每幾個月再平衡一次
   rebalanceDayOfMonth: number         // 每月幾號執行
   nextRebalanceDate: string           // 'YYYY-MM-DD'
+}
+
+/** 全域設定（不含目標配置，已移至 AllocationConfig） */
+export interface RebalanceSettings {
   discordWebhookUrl: string
   discordNotifyDaysBefore: number     // 提前幾天通知
   discount: number                    // 手續費折扣
@@ -161,6 +169,7 @@ export interface PortfolioStore {
   transactions: Transaction[]
   snapshots: PnLSnapshot[]
   dividends: DividendRecord[]         // ETF 配息紀錄
+  allocationConfigs: AllocationConfig[]  // 目標配置清單
   settings: RebalanceSettings
   lastUpdated: string                 // ISO datetime
 }

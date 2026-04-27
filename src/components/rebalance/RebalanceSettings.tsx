@@ -6,14 +6,12 @@
  */
 
 import React, { useState } from 'react'
-import { RebalanceSettings, TargetWeight } from '@/lib/types'
+import { RebalanceSettings } from '@/lib/types'
 import { sendTestNotification } from '@/lib/discord-webhook'
 
 interface Props {
   settings: RebalanceSettings
   onUpdateSettings: (patch: Partial<RebalanceSettings>) => void
-  onAddTargetWeight: (tw: TargetWeight) => void
-  onRemoveTargetWeight: (code: string) => void
   onExportJSON: () => string
   onImportJSON: (json: string) => boolean
 }
@@ -21,16 +19,9 @@ interface Props {
 export default function RebalanceSettingsPanel({
   settings,
   onUpdateSettings,
-  onAddTargetWeight,
-  onRemoveTargetWeight,
   onExportJSON,
   onImportJSON,
 }: Props) {
-  const [newCode, setNewCode] = useState('')
-  const [newName, setNewName] = useState('')
-  const [newWeight, setNewWeight] = useState('')
-  const [newExchange, setNewExchange] = useState<'tse' | 'otc'>('tse')
-
   const [webhookStatus, setWebhookStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [importError, setImportError] = useState<string | null>(null)
   const [importSuccess, setImportSuccess] = useState(false)
@@ -39,32 +30,6 @@ export default function RebalanceSettingsPanel({
   const [syncPassphrase, setSyncPassphrase] = useState('')
   const [syncStatus, setSyncStatus] = useState<'idle' | 'uploading' | 'downloading' | 'ok' | 'fail'>('idle')
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
-
-  const totalTargetWeight = settings.targetWeights.reduce((s, t) => s + t.weight, 0)
-
-  function handleAddTarget() {
-    const code = newCode.trim().toUpperCase()
-    const name = newName.trim()
-    const weight = parseFloat(newWeight)
-    if (!code || !name || isNaN(weight) || weight <= 0) return
-
-    onAddTargetWeight({
-      code,
-      name,
-      exchange: newExchange,
-      isETF: code.startsWith('00') && code.length >= 4,
-      weight,
-    })
-    setNewCode('')
-    setNewName('')
-    setNewWeight('')
-  }
-
-  function updateWeight(code: string, w: number) {
-    const tw = settings.targetWeights.find((t) => t.code === code)
-    if (!tw) return
-    onAddTargetWeight({ ...tw, weight: w })
-  }
 
   async function handleTestWebhook() {
     setWebhookStatus('testing')
@@ -172,147 +137,9 @@ export default function RebalanceSettingsPanel({
 
   return (
     <div className="space-y-6">
-
-      {/* Target weights */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">目標配置權重</p>
-          <span className={`text-xs font-mono font-bold ${
-            Math.abs(totalTargetWeight - 100) < 0.1 ? 'text-green-600' : 'text-orange-500'
-          }`}>
-            合計 {totalTargetWeight.toFixed(1)}% {Math.abs(totalTargetWeight - 100) < 0.1 ? '✓' : '（需等於 100%）'}
-          </span>
-        </div>
-
-        <div className="space-y-2 mb-3">
-          {settings.targetWeights.map((tw) => (
-            <div key={tw.code} className="flex items-center gap-2 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2">
-              <span className="font-mono font-bold text-sm w-20">{tw.code}</span>
-              <span className="text-sm text-slate-600 flex-1 truncate">{tw.name}</span>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  step="1"
-                  className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-sm text-center font-mono bg-white"
-                  value={tw.weight}
-                  onChange={(e) => updateWeight(tw.code, parseFloat(e.target.value) || 0)}
-                />
-                <span className="text-sm text-slate-400">%</span>
-              </div>
-              <button
-                onClick={() => onRemoveTargetWeight(tw.code)}
-                className="text-xs text-red-400 hover:text-red-600 ml-1"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {/* Add new target */}
-        <div className="border border-dashed border-slate-300 rounded-xl p-3 space-y-2">
-          <p className="text-xs text-slate-400">新增標的</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <input
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm uppercase bg-white"
-              value={newCode}
-              onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-              placeholder="代碼（如 00927）"
-            />
-            <input
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="名稱"
-            />
-            <div className="flex gap-1">
-              <input
-                type="number"
-                min="1"
-                max="100"
-                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-                value={newWeight}
-                onChange={(e) => setNewWeight(e.target.value)}
-                placeholder="比重%"
-              />
-              <select
-                className="border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white"
-                value={newExchange}
-                onChange={(e) => setNewExchange(e.target.value as 'tse' | 'otc')}
-              >
-                <option value="tse">上市</option>
-                <option value="otc">上櫃</option>
-              </select>
-            </div>
-            <button
-              onClick={handleAddTarget}
-              disabled={!newCode.trim() || !newName.trim() || !newWeight}
-              className="px-3 py-2 bg-[#2C5F8A] text-white text-sm rounded-lg disabled:opacity-40"
-            >
-              + 新增
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Rebalance schedule */}
-      <div>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">再平衡排程</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">每隔幾個月</label>
-            <div className="flex gap-2 items-center">
-              <input
-                type="number"
-                min="1"
-                max="12"
-                className="w-20 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-center"
-                value={settings.rebalanceIntervalMonths}
-                onChange={(e) => onUpdateSettings({ rebalanceIntervalMonths: parseInt(e.target.value) || 3 })}
-              />
-              <span className="text-sm text-slate-500">個月一次</span>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">每月幾號執行</label>
-            <div className="flex gap-2 items-center">
-              <input
-                type="number"
-                min="1"
-                max="28"
-                className="w-20 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-center"
-                value={settings.rebalanceDayOfMonth}
-                onChange={(e) => onUpdateSettings({ rebalanceDayOfMonth: parseInt(e.target.value) || 1 })}
-              />
-              <span className="text-sm text-slate-500">號</span>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">下次再平衡日期</label>
-            <input
-              type="date"
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-              value={settings.nextRebalanceDate}
-              onChange={(e) => onUpdateSettings({ nextRebalanceDate: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">提前幾天通知（Discord）</label>
-            <div className="flex gap-2 items-center">
-              <input
-                type="number"
-                min="1"
-                max="30"
-                className="w-20 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-center"
-                value={settings.discordNotifyDaysBefore}
-                onChange={(e) => onUpdateSettings({ discordNotifyDaysBefore: parseInt(e.target.value) || 7 })}
-              />
-              <span className="text-sm text-slate-500">天前</span>
-            </div>
-          </div>
-        </div>
+      {/* Hint for allocation configs */}
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        🎯 目標配置權重與再平衡排程已移至「持倉管理 &gt; 配置管理」頁籤管理。
       </div>
 
       {/* Discord webhook */}

@@ -436,6 +436,13 @@ export function calcNextRebalanceDateFrom(
   return next.toISOString().split('T')[0]
 }
 
+/** 從現在起計算下次再平衡日 */
+export function calcNextRebalanceDate(intervalMonths: number, dayOfMonth: number): string {
+  const now = new Date()
+  const next = new Date(now.getFullYear(), now.getMonth() + intervalMonths, dayOfMonth)
+  return next.toISOString().split('T')[0]
+}
+
 export function daysUntilRebalance(nextDateStr: string): number {
   const now = new Date()
   const next = new Date(nextDateStr)

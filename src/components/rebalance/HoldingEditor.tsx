@@ -8,16 +8,17 @@
  */
 
 import React, { useState } from 'react'
-import { Account, Holding, Transaction, TargetWeight, PriceCache } from '@/lib/types'
+import { Account, Holding, Transaction, AllocationConfig, PriceCache } from '@/lib/types'
 import { accountColorStyle } from './AccountManager'
 import { formatMoney } from '@/lib/calculator'
+import { resolveAccountConfig } from '@/lib/portfolio-store'
 
 interface Props {
   accounts: Account[]
   holdings: Holding[]
   transactions: Transaction[]
   prices: Record<string, PriceCache>
-  targetWeights: TargetWeight[]
+  allocationConfigs: AllocationConfig[]
   onUpsertHolding: (h: Holding) => void
   onDeleteHolding: (accountId: string, code: string) => void
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => void
@@ -30,13 +31,16 @@ export default function HoldingEditor({
   holdings,
   transactions,
   prices,
-  targetWeights,
+  allocationConfigs,
   onUpsertHolding,
   onDeleteHolding,
   onAddTransaction,
   onDeleteTransaction,
 }: Props) {
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id ?? '')
+
+  const account = accounts.find((a) => a.id === selectedAccountId)
+  const effectiveTW = account ? resolveAccountConfig(account, allocationConfigs).targetWeights : []
 
   // Quick mode form
   const [qCode, setQCode] = useState('')
@@ -52,7 +56,6 @@ export default function HoldingEditor({
   const [txFee, setTxFee] = useState('')
   const [txNote, setTxNote] = useState('')
 
-  const account = accounts.find((a) => a.id === selectedAccountId)
   const acctHoldings = holdings.filter((h) => h.accountId === selectedAccountId)
   const acctTxs = transactions.filter((t) => t.accountId === selectedAccountId)
 
@@ -62,7 +65,7 @@ export default function HoldingEditor({
     const avgCost = parseFloat(qAvgCost)
     if (!code || isNaN(shares) || shares < 0 || isNaN(avgCost) || avgCost < 0) return
 
-    const tw = targetWeights.find((t) => t.code === code)
+    const tw = effectiveTW.find((t) => t.code === code)
     const p = prices[code]
     onUpsertHolding({
       accountId: selectedAccountId,
@@ -85,7 +88,7 @@ export default function HoldingEditor({
     const fee = parseFloat(txFee) || 0
     if (!code || isNaN(shares) || shares <= 0 || isNaN(price) || price <= 0) return
 
-    const tw = targetWeights.find((t) => t.code === code)
+    const tw = effectiveTW.find((t) => t.code === code)
     const p = prices[code]
 
     // Auto-populate holding name if first transaction

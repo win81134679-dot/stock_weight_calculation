@@ -13,6 +13,7 @@ import {
   PortfolioStore,
   TargetWeight,
   DividendRecord,
+  AllocationConfig,
 } from './types'
 
 const STORAGE_KEY = 'portfolio-store-v1'
@@ -27,11 +28,16 @@ const DEFAULT_TARGET_WEIGHTS: TargetWeight[] = [
   { code: '00988A', name: '主動統一全球創新',  exchange: 'tse', isETF: true, weight: 40 },
 ]
 
-const DEFAULT_SETTINGS: RebalanceSettings = {
+export const DEFAULT_ALLOCATION_CONFIG: AllocationConfig = {
+  id: 'default',
+  name: '預設配置',
   targetWeights: DEFAULT_TARGET_WEIGHTS,
   rebalanceIntervalMonths: 3,
   rebalanceDayOfMonth: 1,
   nextRebalanceDate: calcNextRebalanceDate(3, 1),
+}
+
+const DEFAULT_SETTINGS: RebalanceSettings = {
   discordWebhookUrl: '',
   discordNotifyDaysBefore: 7,
   discount: 6,
@@ -50,6 +56,7 @@ function buildDefaultStore(): PortfolioStore {
     transactions: [],
     snapshots: [],
     dividends: [],
+    allocationConfigs: [{ ...DEFAULT_ALLOCATION_CONFIG, nextRebalanceDate: calcNextRebalanceDate(3, 1) }],
     settings: DEFAULT_SETTINGS,
     lastUpdated: new Date().toISOString(),
   }
@@ -59,20 +66,57 @@ function buildDefaultStore(): PortfolioStore {
 // Persistence
 // ============================================================
 
+function migrateStore(parsed: Record<string, unknown>): PortfolioStore {
+  const base = buildDefaultStore()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = parsed as any
+
+  // Migrate allocationConfigs: if missing, build from old settings.targetWeights
+  let allocationConfigs: AllocationConfig[] = p.allocationConfigs ?? []
+  if (allocationConfigs.length === 0) {
+    const oldSettings = p.settings ?? {}
+    const oldTW: TargetWeight[] = oldSettings.targetWeights ?? DEFAULT_TARGET_WEIGHTS
+    const oldInterval: number = oldSettings.rebalanceIntervalMonths ?? 3
+    const oldDay: number = oldSettings.rebalanceDayOfMonth ?? 1
+    const oldNext: string = oldSettings.nextRebalanceDate ?? calcNextRebalanceDate(oldInterval, oldDay)
+    allocationConfigs = [{
+      id: 'default',
+      name: '預設配置',
+      targetWeights: oldTW,
+      rebalanceIntervalMonths: oldInterval,
+      rebalanceDayOfMonth: oldDay,
+      nextRebalanceDate: oldNext,
+    }]
+  }
+
+  // Build new settings (only global fields)
+  const oldSettings = p.settings ?? {}
+  const newSettings: RebalanceSettings = {
+    discordWebhookUrl: oldSettings.discordWebhookUrl ?? '',
+    discordNotifyDaysBefore: oldSettings.discordNotifyDaysBefore ?? 7,
+    discount: oldSettings.discount ?? 6,
+  }
+
+  return {
+    ...base,
+    accounts: p.accounts ?? [],
+    holdings: p.holdings ?? [],
+    transactions: p.transactions ?? [],
+    snapshots: p.snapshots ?? [],
+    dividends: p.dividends ?? [],
+    allocationConfigs,
+    settings: newSettings,
+    lastUpdated: p.lastUpdated ?? new Date().toISOString(),
+  }
+}
+
 export function loadStore(): PortfolioStore {
   if (typeof window === 'undefined') return buildDefaultStore()
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return buildDefaultStore()
-    const parsed = JSON.parse(raw) as PortfolioStore
-    // Migrate: ensure new settings fields exist
-    const merged: PortfolioStore = {
-      ...buildDefaultStore(),
-      ...parsed,
-      dividends: parsed.dividends ?? [],
-      settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-    }
-    return merged
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return migrateStore(parsed)
   } catch {
     return buildDefaultStore()
   }
@@ -228,47 +272,102 @@ export function updateSettings(
   store: PortfolioStore,
   patch: Partial<RebalanceSettings>
 ): PortfolioStore {
-  const newSettings = { ...store.settings, ...patch }
-  // Recalculate nextRebalanceDate if interval or day changes
-  if (patch.rebalanceIntervalMonths !== undefined || patch.rebalanceDayOfMonth !== undefined) {
-    newSettings.nextRebalanceDate = calcNextRebalanceDate(
-      newSettings.rebalanceIntervalMonths,
-      newSettings.rebalanceDayOfMonth
-    )
-  }
-  return { ...store, settings: newSettings }
+  return { ...store, settings: { ...store.settings, ...patch } }
 }
 
-export function addTargetWeight(store: PortfolioStore, tw: TargetWeight): PortfolioStore {
-  const exists = store.settings.targetWeights.some((t) => t.code === tw.code)
-  if (exists) {
-    return {
-      ...store,
-      settings: {
-        ...store.settings,
-        targetWeights: store.settings.targetWeights.map((t) =>
-          t.code === tw.code ? { ...t, ...tw } : t
-        ),
-      },
-    }
+// ============================================================
+// AllocationConfig CRUD
+// ============================================================
+
+/** 取得帳戶使用的 AllocationConfig（fallback 到第一個配置） */
+export function resolveAccountConfig(
+  account: Account | undefined,
+  allocationConfigs: AllocationConfig[]
+): AllocationConfig {
+  const fallback = allocationConfigs[0] ?? { ...DEFAULT_ALLOCATION_CONFIG, nextRebalanceDate: calcNextRebalanceDate(3, 1) }
+  if (!account?.allocationConfigId) return fallback
+  return allocationConfigs.find((c) => c.id === account.allocationConfigId) ?? fallback
+}
+
+export function addAllocationConfig(
+  store: PortfolioStore,
+  config: Omit<AllocationConfig, 'id'>
+): PortfolioStore {
+  const newConfig: AllocationConfig = {
+    ...config,
+    id: `cfg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
   }
+  return { ...store, allocationConfigs: [...store.allocationConfigs, newConfig] }
+}
+
+export function updateAllocationConfig(
+  store: PortfolioStore,
+  id: string,
+  patch: Partial<Omit<AllocationConfig, 'id'>>
+): PortfolioStore {
   return {
     ...store,
-    settings: {
-      ...store.settings,
-      targetWeights: [...store.settings.targetWeights, tw],
-    },
+    allocationConfigs: store.allocationConfigs.map((c) =>
+      c.id === id ? { ...c, ...patch } : c
+    ),
   }
 }
 
-export function removeTargetWeight(store: PortfolioStore, code: string): PortfolioStore {
+/**
+ * 刪除 AllocationConfig。
+ * Returns false if it's the last config or any account is using it.
+ */
+export function deleteAllocationConfig(
+  store: PortfolioStore,
+  id: string
+): PortfolioStore | false {
+  if (store.allocationConfigs.length <= 1) return false
+  const inUse = store.accounts.some((a) => a.allocationConfigId === id)
+  if (inUse) return false
   return {
     ...store,
-    settings: {
-      ...store.settings,
-      targetWeights: store.settings.targetWeights.filter((t) => t.code !== code),
-    },
+    allocationConfigs: store.allocationConfigs.filter((c) => c.id !== id),
   }
+}
+
+export function duplicateAllocationConfig(
+  store: PortfolioStore,
+  id: string
+): PortfolioStore {
+  const original = store.allocationConfigs.find((c) => c.id === id)
+  if (!original) return store
+  const copy: AllocationConfig = {
+    ...original,
+    id: `cfg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    name: `${original.name}（複製）`,
+    nextRebalanceDate: calcNextRebalanceDate(original.rebalanceIntervalMonths, original.rebalanceDayOfMonth),
+  }
+  return { ...store, allocationConfigs: [...store.allocationConfigs, copy] }
+}
+
+export function setAccountAllocationConfig(
+  store: PortfolioStore,
+  accountId: string,
+  configId: string | null
+): PortfolioStore {
+  return {
+    ...store,
+    accounts: store.accounts.map((a) =>
+      a.id === accountId
+        ? { ...a, allocationConfigId: configId ?? undefined }
+        : a
+    ),
+  }
+}
+
+// Legacy stubs kept for compatibility (no-op)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function addTargetWeight(store: PortfolioStore, _tw: TargetWeight): PortfolioStore {
+  return store
+}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function removeTargetWeight(store: PortfolioStore, _code: string): PortfolioStore {
+  return store
 }
 
 // ============================================================
@@ -289,14 +388,11 @@ export function exportStoreAsJSON(store: PortfolioStore): string {
 
 export function importStoreFromJSON(json: string): PortfolioStore | null {
   try {
-    const parsed = JSON.parse(json) as PortfolioStore
-    if (!parsed.accounts || !parsed.settings) return null
-    return {
-      ...buildDefaultStore(),
-      ...parsed,
-      dividends: parsed.dividends ?? [],
-      settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-    }
+    const parsed = JSON.parse(json) as Record<string, unknown>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = parsed as any
+    if (!p.accounts || !p.settings) return null
+    return migrateStore(parsed)
   } catch {
     return null
   }

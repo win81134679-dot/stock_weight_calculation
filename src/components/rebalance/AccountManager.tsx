@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react'
-import { Account } from '@/lib/types'
+import { Account, AllocationConfig } from '@/lib/types'
 
 const COLOR_MAP: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   blue:   { bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700',   dot: 'bg-blue-400' },
@@ -24,12 +24,14 @@ export function accountColorStyle(color: string) {
 
 interface Props {
   accounts: Account[]
+  allocationConfigs: AllocationConfig[]
   onAdd: (name: string, broker?: string) => void
   onUpdate: (id: string, patch: Partial<Omit<Account, 'id'>>) => void
   onDelete: (id: string) => void
+  onSetAllocationConfig: (accountId: string, configId: string | null) => void
 }
 
-export default function AccountManager({ accounts, onAdd, onUpdate, onDelete }: Props) {
+export default function AccountManager({ accounts, allocationConfigs, onAdd, onUpdate, onDelete, onSetAllocationConfig }: Props) {
   const [newName, setNewName] = useState('')
   const [newBroker, setNewBroker] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
@@ -106,34 +108,52 @@ export default function AccountManager({ accounts, onAdd, onUpdate, onDelete }: 
           }
 
           return (
-            <div key={acc.id} className={`flex items-center justify-between rounded-xl border p-3 ${style.bg} ${style.border}`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${style.dot}`} />
-                <div>
-                  <span className={`font-semibold text-sm ${style.text}`}>{acc.name}</span>
-                  {acc.broker && (
-                    <span className="ml-2 text-xs text-slate-400">{acc.broker}</span>
-                  )}
+            <div key={acc.id} className={`flex flex-col gap-2 rounded-xl border p-3 ${style.bg} ${style.border}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${style.dot}`} />
+                  <div>
+                    <span className={`font-semibold text-sm ${style.text}`}>{acc.name}</span>
+                    {acc.broker && (
+                      <span className="ml-2 text-xs text-slate-400">{acc.broker}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => startEdit(acc)}
+                    className="text-xs text-slate-500 hover:text-[#2C5F8A] px-2 py-1"
+                  >
+                    編輯
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`確定刪除「${acc.name}」？此帳戶的所有持倉與交易記錄也會一併刪除。`)) {
+                        onDelete(acc.id)
+                      }
+                    }}
+                    className="text-xs text-red-400 hover:text-red-600 px-2 py-1"
+                  >
+                    刪除
+                  </button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => startEdit(acc)}
-                  className="text-xs text-slate-500 hover:text-[#2C5F8A] px-2 py-1"
-                >
-                  編輯
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm(`確定刪除「${acc.name}」？此帳戶的所有持倉與交易記錄也會一併刪除。`)) {
-                      onDelete(acc.id)
-                    }
-                  }}
-                  className="text-xs text-red-400 hover:text-red-600 px-2 py-1"
-                >
-                  刪除
-                </button>
-              </div>
+              {/* Allocation config selector */}
+              {allocationConfigs.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-500">目標配置：</span>
+                  <select
+                    value={acc.allocationConfigId ?? ''}
+                    onChange={(e) => onSetAllocationConfig(acc.id, e.target.value || null)}
+                    className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
+                  >
+                    <option value="">{allocationConfigs[0]?.name ?? '預設配置'}（預設）</option>
+                    {allocationConfigs.slice(1).map((cfg) => (
+                      <option key={cfg.id} value={cfg.id}>{cfg.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )
         })}

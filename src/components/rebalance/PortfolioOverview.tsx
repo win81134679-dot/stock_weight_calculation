@@ -14,7 +14,7 @@ import {
   Tooltip as ReTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { Account, Holding, PriceCache, TargetWeight, PnLSnapshot, Transaction, DividendRecord } from '@/lib/types'
+import { Account, Holding, PriceCache, AllocationConfig, PnLSnapshot, Transaction, DividendRecord } from '@/lib/types'
 import { calcAccountPnL, calcCombinedPnL, calcQuarterlyRebalance, daysUntilRebalance } from '@/lib/rebalance-calculator'
 import { formatMoney } from '@/lib/calculator'
 import { accountColorStyle } from './AccountManager'
@@ -24,6 +24,7 @@ import TreemapChart from './TreemapChart'
 import RadialWeightChart from './RadialWeightChart'
 import StockPerfCard from './StockPerfCard'
 import LivePriceStatus from './LivePriceStatus'
+import { resolveAccountConfig } from '@/lib/portfolio-store'
 
 const PIE_COLORS = ['#2C5F8A', '#4A90C4', '#60A5FA', '#34D399', '#F59E0B', '#F87171', '#A78BFA', '#FB923C']
 
@@ -32,10 +33,9 @@ interface Props {
   holdings: Holding[]
   transactions: Transaction[]
   prices: Record<string, PriceCache>
-  targetWeights: TargetWeight[]
+  allocationConfigs: AllocationConfig[]
   snapshots: PnLSnapshot[]
   dividends?: DividendRecord[]
-  nextRebalanceDate?: string
   loading: boolean
   secondsUntilRefresh: number
   isMarketHours: boolean
@@ -104,10 +104,9 @@ export default function PortfolioOverview({
   holdings,
   transactions,
   prices,
-  targetWeights,
+  allocationConfigs,
   snapshots,
   dividends = [],
-  nextRebalanceDate,
   loading,
   secondsUntilRefresh,
   isMarketHours,
@@ -119,6 +118,14 @@ export default function PortfolioOverview({
   const [showRebalancePlan, setShowRebalancePlan] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
+
+  // Resolve target weights and next rebalance date based on selection
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId)
+  const resolvedConfig = selectedAccount
+    ? resolveAccountConfig(selectedAccount, allocationConfigs)
+    : allocationConfigs[0]
+  const targetWeights = resolvedConfig?.targetWeights ?? []
+  const nextRebalanceDate = resolvedConfig?.nextRebalanceDate
 
   const combined = useMemo(
     () => calcCombinedPnL(accounts.map((a) => a.id), holdings, prices, targetWeights, transactions),
@@ -552,6 +559,13 @@ export default function PortfolioOverview({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Multi-config banner when viewing all accounts */}
+      {selectedAccountId === '__all__' && allocationConfigs.length > 1 && accounts.some((a) => a.allocationConfigId) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          ⚠️ 各帳戶使用不同目標配置，以下偏差分析基於第一個配置（{allocationConfigs[0]?.name}）。請切換至個別帳戶查看各自偏差。
         </div>
       )}
 

@@ -16,6 +16,7 @@ import {
   TargetWeight,
   PnLSnapshot,
   DividendRecord,
+  AllocationConfig,
 } from '@/lib/types'
 import {
   loadStore,
@@ -30,6 +31,11 @@ import {
   updateSettings,
   addTargetWeight,
   removeTargetWeight,
+  addAllocationConfig,
+  updateAllocationConfig,
+  deleteAllocationConfig,
+  duplicateAllocationConfig,
+  setAccountAllocationConfig,
   addSnapshot,
   addDividend,
   deleteDividend,
@@ -120,6 +126,36 @@ export function usePortfolioStore() {
   const handleBulkUpsertDividends = useCallback((records: Omit<DividendRecord, 'id'>[]) => {
     setStore((s) => bulkUpsertDividends(s, records))
   }, [])
+
+  // ── AllocationConfig CRUD ─────────────────────────────────
+
+  const handleAddAllocationConfig = useCallback((config: Omit<AllocationConfig, 'id'>) => {
+    setStore((s) => addAllocationConfig(s, config))
+  }, [])
+
+  const handleUpdateAllocationConfig = useCallback((id: string, patch: Partial<Omit<AllocationConfig, 'id'>>) => {
+    setStore((s) => updateAllocationConfig(s, id, patch))
+  }, [])
+
+  const handleDeleteAllocationConfig = useCallback((id: string): boolean => {
+    let success = false
+    setStore((s) => {
+      const result = deleteAllocationConfig(s, id)
+      if (result === false) return s
+      success = true
+      return result
+    })
+    return success
+  }, [])
+
+  const handleDuplicateAllocationConfig = useCallback((id: string) => {
+    setStore((s) => duplicateAllocationConfig(s, id))
+  }, [])
+
+  const handleSetAccountAllocationConfig = useCallback((accountId: string, configId: string | null) => {
+    setStore((s) => setAccountAllocationConfig(s, accountId, configId))
+  }, [])
+
   // ── Import / Export ───────────────────────────────────────
 
   const handleExport = useCallback((): string => {
@@ -150,6 +186,12 @@ export function usePortfolioStore() {
     updateSettings: handleUpdateSettings,
     addTargetWeight: handleAddTargetWeight,
     removeTargetWeight: handleRemoveTargetWeight,
+    // AllocationConfig
+    addAllocationConfig: handleAddAllocationConfig,
+    updateAllocationConfig: handleUpdateAllocationConfig,
+    deleteAllocationConfig: handleDeleteAllocationConfig,
+    duplicateAllocationConfig: handleDuplicateAllocationConfig,
+    setAccountAllocationConfig: handleSetAccountAllocationConfig,
     // Snapshots
     addSnapshot: handleAddSnapshot,
     // Dividends

@@ -6,17 +6,17 @@
  */
 
 import React, { useState, useMemo } from 'react'
-import { Account, Holding, PriceCache, TargetWeight } from '@/lib/types'
+import { Account, Holding, PriceCache, AllocationConfig } from '@/lib/types'
 import { calcQuarterlyRebalance, daysUntilRebalance } from '@/lib/rebalance-calculator'
 import { formatMoney } from '@/lib/calculator'
 import { accountColorStyle } from './AccountManager'
+import { resolveAccountConfig } from '@/lib/portfolio-store'
 
 interface Props {
   accounts: Account[]
   holdings: Holding[]
   prices: Record<string, PriceCache>
-  targetWeights: TargetWeight[]
-  nextRebalanceDate: string
+  allocationConfigs: AllocationConfig[]
   discount: number
 }
 
@@ -24,11 +24,15 @@ export default function QuarterlyRebalancer({
   accounts,
   holdings,
   prices,
-  targetWeights,
-  nextRebalanceDate,
+  allocationConfigs,
   discount,
 }: Props) {
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id ?? '')
+
+  const account = accounts.find((a) => a.id === selectedAccountId)
+  const resolvedConfig = account ? resolveAccountConfig(account, allocationConfigs) : allocationConfigs[0]
+  const targetWeights = resolvedConfig?.targetWeights ?? []
+  const nextRebalanceDate = resolvedConfig?.nextRebalanceDate ?? ''
 
   const daysLeft = useMemo(() => daysUntilRebalance(nextRebalanceDate), [nextRebalanceDate])
 

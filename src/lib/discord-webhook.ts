@@ -117,10 +117,11 @@ export async function sendTestNotification(webhookUrl: string): Promise<boolean>
 export async function checkAndNotifyOnLoad(
   settings: RebalanceSettings,
   combinedPnlPct: number,
-  deviations: { name: string; deviation: number }[]
+  deviations: { name: string; deviation: number }[],
+  nextRebalanceDate?: string
 ): Promise<void> {
-  const { discordWebhookUrl, discordNotifyDaysBefore, nextRebalanceDate } = settings
-  if (!discordWebhookUrl) return
+  const { discordWebhookUrl, discordNotifyDaysBefore } = settings
+  if (!discordWebhookUrl || !nextRebalanceDate) return
 
   const daysLeft = daysUntilRebalance(nextRebalanceDate)
   if (daysLeft > discordNotifyDaysBefore) return
