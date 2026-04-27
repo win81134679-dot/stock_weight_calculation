@@ -337,18 +337,19 @@ export function calcAccountPnL(
 ): AccountPnL {
   const acctHoldings = holdings.filter((h) => h.accountId === accountId)
 
-  const totalValue = acctHoldings.reduce((sum, h) => {
-    return sum + h.shares * (prices[h.code]?.price ?? 0)
-  }, 0)
-
-  const totalCost = acctHoldings.reduce((sum, h) => {
-    return sum + h.shares * h.avgCost
-  }, 0)
-
-  const holdingDetails = acctHoldings.map((h) => {
+  // 第一階段：計算整數化的 value / cost（對齊券商口徑）
+  const rawDetails = acctHoldings.map((h) => {
     const price = prices[h.code]?.price ?? 0
-    const value = h.shares * price
-    const cost = h.shares * h.avgCost
+    const value = price > 0 ? Math.round(h.shares * price) : 0
+    const cost = Math.floor(h.shares * h.avgCost)
+    return { h, price, value, cost }
+  })
+
+  const totalValue = rawDetails.reduce((s, d) => s + d.value, 0)
+  const totalCost = rawDetails.reduce((s, d) => s + d.cost, 0)
+
+  // 第二階段：加入 sellFee / pnl / weight
+  const holdingDetails = rawDetails.map(({ h, price, value, cost }) => {
     const sellFee = price > 0 ? estimateSellFee(value, h.isETF) : 0
     const pnl = value - sellFee - cost
     const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0
