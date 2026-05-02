@@ -20,25 +20,35 @@ interface Props {
 
 // ─── 股票名稱自動帶入 ─────────────────────────────────────────────────────────
 
+/**
+ * 透過 /api/stock-price proxy 查詢股票名稱。
+ * 支援 tse + otc 兩個交易所，處理盤後（z='-'）仍能取名稱。
+ * 查不到時回傳 null，讓呼叫端決定是否 fallback。
+ */
 async function fetchStockName(code: string): Promise<{ name: string; exchange: 'tse' | 'otc'; isETF: boolean } | null> {
-  for (const ex of ['tse', 'otc'] as const) {
-    try {
-      const res = await fetch(
-        `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${ex}_${code}.tw&json=1&delay=0`
-      )
-      const data = await res.json()
-      const info = data?.msgArray?.[0]
-      if (!info?.n || info.n === '-') continue
+  const upper = code.trim().toUpperCase()
+  // 同時查 tse + otc
+  const paramTse = `tse_${upper}.tw`
+  const paramOtc = `otc_${upper}.tw`
+  try {
+    const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(`${paramTse}|${paramOtc}`)}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    const msgArray: { c?: string; n?: string; ex_ch?: string }[] = data?.msgArray ?? []
+    for (const info of msgArray) {
+      const name = (info.n ?? '').trim()
+      if (!name || name === '-') continue
+      const exchange = (info.ex_ch ?? '').startsWith('otc') ? 'otc' : 'tse'
       return {
-        name: info.n,
-        exchange: ex,
-        isETF: code.startsWith('00') && code.length >= 4,
+        name,
+        exchange,
+        isETF: upper.startsWith('00') && upper.length >= 4,
       }
-    } catch {
-      // continue
     }
+    return null
+  } catch {
+    return null
   }
-  return null
 }
 
 // ─── inline 配置編輯器 ────────────────────────────────────────────────────────
@@ -98,14 +108,21 @@ function ConfigEditor({
     const info = await fetchStockName(code)
     setFetchingName(false)
 
+    // 查不到名稱時仍允許新增（以代碼作為名稱），並顯示提示
+    const resolvedName = info?.name ?? code
+    const resolvedExchange = info?.exchange ?? 'tse'
+    const resolvedIsETF = info?.isETF ?? (code.startsWith('00') && code.length >= 4)
+
     if (!info) {
-      setNameError(`找不到 ${code}，請確認代碼`)
-      return
+      setNameError(`無法自動帶入 ${code} 名稱，已以代碼代替，可手動修改`)
     }
 
     setState((prev) => ({
       ...prev,
-      targetWeights: [...prev.targetWeights, { code, name: info.name, exchange: info.exchange, isETF: info.isETF, weight }],
+      targetWeights: [
+        ...prev.targetWeights,
+        { code, name: resolvedName, exchange: resolvedExchange, isETF: resolvedIsETF, weight },
+      ],
     }))
     setNewCode('')
     setNewWeight('')
@@ -246,7 +263,7 @@ function ConfigEditor({
             {fetchingName ? '查詢…' : '+ 加入'}
           </button>
         </div>
-        {nameError && <p className="text-xs text-red-500 mt-1">{nameError}</p>}
+        {nameError && <p className="text-xs text-amber-500 mt-1">⚠ {nameError}</p>}
       </div>
 
       {/* Actions */}

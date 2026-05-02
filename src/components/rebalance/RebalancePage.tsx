@@ -66,16 +66,23 @@ export default function RebalancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uniqueCodes])
 
-  // Auto-snapshot on overview tab open (once per day)
+  // Auto-snapshot on overview tab open, and whenever holdings change (to reflect deletions)
   useEffect(() => {
     if (activeTab === 'overview' && store.accounts.length > 0 && Object.keys(prices).length > 0) {
       const updated = takeAndSaveSnapshot(store, prices)
-      if (updated.snapshots.length !== store.snapshots.length) {
-        addSnapshot(updated.snapshots[updated.snapshots.length - 1])
+      // Always sync: either a new snapshot was added OR today's snapshot was overwritten
+      const todayKey = new Date().toISOString().split('T')[0]
+      const updatedToday = updated.snapshots.find((s) => s.date.startsWith(todayKey))
+      const storeToday = store.snapshots.find((s) => s.date.startsWith(todayKey))
+      const changed =
+        updated.snapshots.length !== store.snapshots.length ||
+        updatedToday?.combinedPnl !== storeToday?.combinedPnl
+      if (changed && updatedToday) {
+        addSnapshot(updatedToday)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, Object.keys(prices).join(',')])
+  }, [activeTab, Object.keys(prices).join(','), store.holdings.map((h) => `${h.code}:${h.shares}`).join(',')])
 
   // Discord notification check on page load
   useEffect(() => {

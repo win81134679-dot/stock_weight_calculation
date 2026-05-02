@@ -251,7 +251,15 @@ export function recalcHoldingFromTransactions(
     (h) => h.accountId === accountId && h.code === code
   )
 
-  if (totalShares === 0 && !existing) return store
+  // 所有交易都刪光後，直接刪除持倉（不留殭屍 0-share 記錄）
+  if (totalShares === 0) {
+    return {
+      ...store,
+      holdings: store.holdings.filter(
+        (h) => !(h.accountId === accountId && h.code === code)
+      ),
+    }
+  }
 
   const holding: Holding = {
     accountId,
