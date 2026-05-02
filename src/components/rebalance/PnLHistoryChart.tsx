@@ -28,6 +28,7 @@ interface Props {
   snapshots: PnLSnapshot[]
   accountId: string | null  // null = combined
   accounts?: Account[]      // needed for per-account mode
+  onDeleteSnapshot?: (dateKey: string) => void
 }
 
 function formatDate(iso: string): string {
@@ -35,8 +36,14 @@ function formatDate(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-export default function PnLHistoryChart({ snapshots, accountId, accounts = [] }: Props) {
+function formatFullDate(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+}
+
+export default function PnLHistoryChart({ snapshots, accountId, accounts = [], onDeleteSnapshot }: Props) {
   const [mode, setMode] = useState<'combined' | 'per-account'>('combined')
+  const [managing, setManaging] = useState(false)
 
   // Combined mode data (existing behavior)
   const combinedData = useMemo(() => {
@@ -70,6 +77,51 @@ export default function PnLHistoryChart({ snapshots, accountId, accounts = [] }:
 
   if (combinedData.length < 2) return null
 
+  // ── 管理快照面板 ────────────────────────────────────────
+  if (managing && onDeleteSnapshot) {
+    const sorted = [...snapshots].sort((a, b) => b.date.localeCompare(a.date))
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-slate-500">管理快照（共 {snapshots.length} 筆）</p>
+          <button
+            onClick={() => setManaging(false)}
+            className="text-xs text-[#2C5F8A] hover:underline"
+          >
+            ← 返回圖表
+          </button>
+        </div>
+        <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+          {sorted.map((s) => {
+            const dateKey = s.date.split('T')[0]
+            const pnl = accountId
+              ? (s.accounts.find((a) => a.accountId === accountId)?.totalPnl ?? 0)
+              : s.combinedPnl
+            const isPos = pnl >= 0
+            return (
+              <div key={dateKey} className="flex items-center justify-between rounded-lg px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500 font-mono">{formatFullDate(s.date)}</span>
+                  <span className={`text-xs font-mono font-semibold ${isPos ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {isPos ? '+' : ''}{formatMoney(pnl)}
+                  </span>
+                </div>
+                <button
+                  onClick={() => onDeleteSnapshot(dateKey)}
+                  className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors text-base leading-none"
+                  title="刪除此快照"
+                >
+                  ×
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // ── 圖表模式 ────────────────────────────────────────────
   // Combined mode rendering
   if (mode === 'combined' || !showToggle) {
     const minPnl = Math.min(...combinedData.map((d) => d.pnl))
@@ -79,26 +131,39 @@ export default function PnLHistoryChart({ snapshots, accountId, accounts = [] }:
 
     return (
       <div>
-        {showToggle && (
-          <div className="flex gap-1 mb-3">
-            <button
-              onClick={() => setMode('combined')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                mode === 'combined' ? 'bg-[#2C5F8A] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-              }`}
-            >
-              合併
-            </button>
-            <button
-              onClick={() => setMode('per-account')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                mode === 'per-account' ? 'bg-[#2C5F8A] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-              }`}
-            >
-              分帳戶
-            </button>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex gap-1">
+            {showToggle && (
+              <>
+                <button
+                  onClick={() => setMode('combined')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    mode === 'combined' ? 'bg-[#2C5F8A] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  合併
+                </button>
+                <button
+                  onClick={() => setMode('per-account')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    mode === 'per-account' ? 'bg-[#2C5F8A] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  分帳戶
+                </button>
+              </>
+            )}
           </div>
-        )}
+          {onDeleteSnapshot && (
+            <button
+              onClick={() => setManaging(true)}
+              className="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1"
+              title="管理快照"
+            >
+              <span>🗑</span><span className="hidden sm:inline">管理快照</span>
+            </button>
+          )}
+        </div>
         <div className="h-52 sm:h-64">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={combinedData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -149,19 +214,30 @@ export default function PnLHistoryChart({ snapshots, accountId, accounts = [] }:
 
   return (
     <div>
-      <div className="flex gap-1 mb-3">
-        <button
-          onClick={() => setMode('combined')}
-          className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
-        >
-          合併
-        </button>
-        <button
-          onClick={() => setMode('per-account')}
-          className="px-3 py-1 rounded-lg text-xs font-semibold bg-[#2C5F8A] text-white transition-colors"
-        >
-          分帳戶
-        </button>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setMode('combined')}
+            className="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+          >
+            合併
+          </button>
+          <button
+            onClick={() => setMode('per-account')}
+            className="px-3 py-1 rounded-lg text-xs font-semibold bg-[#2C5F8A] text-white transition-colors"
+          >
+            分帳戶
+          </button>
+        </div>
+        {onDeleteSnapshot && (
+          <button
+            onClick={() => setManaging(true)}
+            className="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1"
+            title="管理快照"
+          >
+            <span>🗑</span><span className="hidden sm:inline">管理快照</span>
+          </button>
+        )}
       </div>
 
       {/* Per-account legend */}

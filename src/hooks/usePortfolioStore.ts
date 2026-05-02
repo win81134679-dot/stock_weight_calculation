@@ -37,6 +37,7 @@ import {
   duplicateAllocationConfig,
   setAccountAllocationConfig,
   addSnapshot,
+  deleteSnapshot,
   addDividend,
   deleteDividend,
   bulkUpsertDividends,
@@ -114,6 +115,11 @@ export function usePortfolioStore() {
   const handleAddSnapshot = useCallback((snapshot: PnLSnapshot) => {
     setStore((s) => addSnapshot(s, snapshot))
   }, [])
+
+  const handleDeleteSnapshot = useCallback((dateKey: string) => {
+    setStore((s) => deleteSnapshot(s, dateKey))
+  }, [])
+
   // ── Dividends ──────────────────────────────────────────────────
 
   const handleAddDividend = useCallback((record: Omit<DividendRecord, 'id'>) => {
@@ -199,6 +205,7 @@ export function usePortfolioStore() {
     setAccountAllocationConfig: handleSetAccountAllocationConfig,
     // Snapshots
     addSnapshot: handleAddSnapshot,
+    deleteSnapshot: handleDeleteSnapshot,
     // Dividends
     addDividend: handleAddDividend,
     deleteDividend: handleDeleteDividend,

@@ -392,6 +392,13 @@ export function addSnapshot(store: PortfolioStore, snapshot: PnLSnapshot): Portf
   return { ...store, snapshots }
 }
 
+export function deleteSnapshot(store: PortfolioStore, dateKey: string): PortfolioStore {
+  return {
+    ...store,
+    snapshots: store.snapshots.filter((s) => !s.date.startsWith(dateKey)),
+  }
+}
+
 export function exportStoreAsJSON(store: PortfolioStore): string {
   return JSON.stringify(store, null, 2)
 }

@@ -45,6 +45,7 @@ export default function RebalancePage() {
     updateSettings,
     addAllocationConfig, updateAllocationConfig, deleteAllocationConfig, duplicateAllocationConfig, setAccountAllocationConfig,
     addSnapshot,
+    deleteSnapshot,
     addDividend, deleteDividend, bulkUpsertDividends, setDividendEntryDate,
     exportJSON, importJSON,
   } = usePortfolioStore()
@@ -181,6 +182,7 @@ export default function RebalancePage() {
           secondsUntilRefresh={secondsUntilRefresh}
           isMarketHours={isMarketHoursNow}
           onRefreshPrices={handleRefreshPrices}
+          onDeleteSnapshot={deleteSnapshot}
         />
       )}
 

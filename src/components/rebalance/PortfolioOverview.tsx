@@ -43,6 +43,7 @@ interface Props {
   secondsUntilRefresh: number
   isMarketHours: boolean
   onRefreshPrices: () => void
+  onDeleteSnapshot?: (dateKey: string) => void
 }
 
 function StatCard({
@@ -114,6 +115,7 @@ export default function PortfolioOverview({
   secondsUntilRefresh,
   isMarketHours,
   onRefreshPrices,
+  onDeleteSnapshot,
 }: Props) {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('__all__')
   const [mounted, setMounted] = useState(false)
@@ -597,6 +599,7 @@ export default function PortfolioOverview({
             snapshots={snapshots}
             accountId={selectedAccountId === '__all__' ? null : selectedAccountId}
             accounts={accounts}
+            onDeleteSnapshot={onDeleteSnapshot}
           />
         </div>
       )}
