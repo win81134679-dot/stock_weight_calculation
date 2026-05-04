@@ -40,37 +40,23 @@ export default function StockInput({ stocks, onStocksChange }: Props) {
       updateStock(index, { loading: true, error: '' })
 
       try {
-        const exchanges = ['tse', 'otc'] as const
-        let found = false
+        // Route 內部自動處理 .TW → .TWO fallback，一次查詢即可
+        const param = `tse_${code}.tw`
+        const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(param)}`)
+        const data = await res.json()
 
-        for (const ex of exchanges) {
-          const param = `${ex}_${code}.tw`
-          const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(param)}`)
-          const data = await res.json()
-
-          if (data.msgArray && data.msgArray.length > 0) {
-            const info = data.msgArray[0]
-            const price = parseFloat(info.z)
-            const fallbackPrice = parseFloat(info.y)
-            const actualPrice = !isNaN(price) && price > 0 ? price : fallbackPrice
-
-            if (!isNaN(actualPrice) && actualPrice > 0) {
-              const isETF = code.startsWith('00') && code.length >= 4
-              updateStock(index, {
-                name: info.n?.trim() || code,
-                price: actualPrice,
-                isETF,
-                exchange: ex,
-                loading: false,
-                error: '',
-              })
-              found = true
-              break
-            }
-          }
-        }
-
-        if (!found) {
+        if (data.stocks && data.stocks.length > 0) {
+          const s = data.stocks[0]
+          const isETF = code.startsWith('00') && code.length >= 4
+          updateStock(index, {
+            name: s.name || code,
+            price: s.price,
+            isETF,
+            exchange: s.exchange as 'tse' | 'otc',
+            loading: false,
+            error: '',
+          })
+        } else {
           updateStock(index, { name: '', price: 0, loading: false, error: '找不到此股票代碼' })
         }
       } catch {

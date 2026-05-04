@@ -67,16 +67,14 @@ export interface TopUpResult {
   stocks: TopUpStockResult[]
 }
 
-/** TWSE API 回傳的單支股票資料 */
-export interface TWSEStockInfo {
-  c: string   // 股票代碼
-  n: string   // 股票名稱
-  z: string   // 最新成交價（「-」表示未成交）
-  y: string   // 昨收價
-  o: string   // 開盤價
-  h: string   // 最高價
-  l: string   // 最低價
-  ex_ch: string // 交易所前綴 (tse_2330.tw)
+/** Yahoo Finance 標準化後的單支股票報價（/api/stock-price 回傳格式） */
+export interface YahooStockQuote {
+  code: string          // 股票代碼（純數字或含字母，如 00988A）
+  name: string          // 股票名稱
+  price: number         // 最新成交價
+  prevClose: number     // 昨收價
+  exchange: 'tse' | 'otc'  // 上市 / 上櫃
+  isMarketOpen: boolean // 盤中（marketState === 'REGULAR'）
 }
 
 // ============================================================
@@ -259,11 +257,9 @@ export interface RebalancePlan {
   netCashFlow: number         // 正 = 需補充現金
 }
 
-/** TWSE API 回傳格式 */
-export interface TWSEResponse {
-  msgArray: TWSEStockInfo[]
-  rtcode: string
-  rtmessage: string
+/** /api/stock-price 批次回傳格式 */
+export interface StockPriceResponse {
+  stocks: YahooStockQuote[]
 }
 
 /** 通知訊息 */

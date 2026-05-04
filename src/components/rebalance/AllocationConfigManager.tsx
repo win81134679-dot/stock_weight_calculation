@@ -29,19 +29,18 @@ async function fetchStockName(code: string): Promise<{ name: string; exchange: '
   const upper = code.trim().toUpperCase()
   // 同時查 tse + otc
   const paramTse = `tse_${upper}.tw`
-  const paramOtc = `otc_${upper}.tw`
   try {
-    const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(`${paramTse}|${paramOtc}`)}`)
+    // Route 內部自動處理 .TW → .TWO fallback
+    const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(paramTse)}`)
     if (!res.ok) return null
     const data = await res.json()
-    const msgArray: { c?: string; n?: string; ex_ch?: string }[] = data?.msgArray ?? []
-    for (const info of msgArray) {
-      const name = (info.n ?? '').trim()
+    const stocks: { name?: string; exchange?: string }[] = data?.stocks ?? []
+    for (const s of stocks) {
+      const name = (s.name ?? '').trim()
       if (!name || name === '-') continue
-      const exchange = (info.ex_ch ?? '').startsWith('otc') ? 'otc' : 'tse'
       return {
         name,
-        exchange,
+        exchange: (s.exchange === 'otc' ? 'otc' : 'tse') as 'tse' | 'otc',
         isETF: upper.startsWith('00') && upper.length >= 4,
       }
     }

@@ -55,65 +55,52 @@ export function useCurrentPrices() {
     try {
       const results: Record<string, PriceCache> = { ...cacheRef.current }
 
+      // Route 內部已自動處理 .TW → .TWO fallback，一次呼叫即可取得上市與上櫃
       const tseParam = stale.map((c) => `tse_${c}.tw`).join('|')
       const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(tseParam)}`)
       const data = await res.json()
 
       const foundCodes = new Set<string>()
 
-      if (data.msgArray && Array.isArray(data.msgArray)) {
-        for (const info of data.msgArray) {
-          const code = (info.c ?? '').trim().toUpperCase()
-          if (!code) continue
-
-          const rawPrice = parseFloat(info.z)
-          const fallback = parseFloat(info.y)
-          const price = !isNaN(rawPrice) && rawPrice > 0 ? rawPrice : fallback
-
-          if (!isNaN(price) && price > 0) {
-            const prevClose = !isNaN(fallback) && fallback > 0 ? fallback : price
-            const cache: PriceCache = {
-              code,
-              name: (info.n ?? '').trim() || code,
-              price,
-              prevClose,
-              exchange: 'tse',
-              isETF: isETF(code),
-              fetchedAt: now,
-              isMarketOpen: !isNaN(rawPrice) && rawPrice > 0,
-            }
-            results[code] = cache
-            foundCodes.add(code)
+      if (data.stocks && Array.isArray(data.stocks)) {
+        for (const s of data.stocks) {
+          const code = (s.code ?? '').trim().toUpperCase()
+          if (!code || !(s.price > 0)) continue
+          const cache: PriceCache = {
+            code,
+            name: (s.name ?? '').trim() || code,
+            price: s.price,
+            prevClose: s.prevClose > 0 ? s.prevClose : s.price,
+            exchange: s.exchange as 'tse' | 'otc',
+            isETF: isETF(code),
+            fetchedAt: now,
+            isMarketOpen: s.isMarketOpen,
           }
+          results[code] = cache
+          foundCodes.add(code)
         }
       }
 
-      // Retry not-found codes as otc
+      // 安全備援：第一輪仍未找到的代碼（理論上 route 內已處理，此層保留作 failsafe）
       const otcCodes = stale.filter((c) => !foundCodes.has(c))
       if (otcCodes.length > 0) {
         const otcParam = otcCodes.map((c) => `otc_${c}.tw`).join('|')
         const res2 = await fetch(`/api/stock-price?codes=${encodeURIComponent(otcParam)}`)
         const data2 = await res2.json()
 
-        if (data2.msgArray && Array.isArray(data2.msgArray)) {
-          for (const info of data2.msgArray) {
-            const code = (info.c ?? '').trim().toUpperCase()
-            if (!code) continue
-            const rawPrice = parseFloat(info.z)
-            const fallback = parseFloat(info.y)
-            const price = !isNaN(rawPrice) && rawPrice > 0 ? rawPrice : fallback
-            if (!isNaN(price) && price > 0) {
-              const prevClose2 = !isNaN(fallback) && fallback > 0 ? fallback : price
-              results[code] = {
-                code,
-                name: (info.n ?? '').trim() || code,
-                price,
-                prevClose: prevClose2,
-                exchange: 'otc',
-                isETF: isETF(code),
-                fetchedAt: now,
-                isMarketOpen: !isNaN(rawPrice) && rawPrice > 0,
-              }
+        if (data2.stocks && Array.isArray(data2.stocks)) {
+          for (const s of data2.stocks) {
+            const code = (s.code ?? '').trim().toUpperCase()
+            if (!code || !(s.price > 0)) continue
+            results[code] = {
+              code,
+              name: (s.name ?? '').trim() || code,
+              price: s.price,
+              prevClose: s.prevClose > 0 ? s.prevClose : s.price,
+              exchange: s.exchange as 'tse' | 'otc',
+              isETF: isETF(code),
+              fetchedAt: now,
+              isMarketOpen: s.isMarketOpen,
             }
           }
         }

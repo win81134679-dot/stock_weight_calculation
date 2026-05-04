@@ -160,23 +160,17 @@ function PortfolioCalculatorPage() {
         indicesToFetch.map(async (i) => {
           const code = newStocks[i].code.trim()
           const knownExchange = newStocks[i].exchange
-          const exchanges = (knownExchange ? [knownExchange, ...((['tse', 'otc'] as const).filter((e) => e !== knownExchange))] : ['tse', 'otc']) as ('tse' | 'otc')[]
-          for (const ex of exchanges) {
-            try {
-              const param = `${ex}_${code}.tw`
-              const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(param)}`)
-              const data = await res.json()
-              if (data.msgArray && data.msgArray.length > 0) {
-                const info = data.msgArray[0]
-                const price = parseFloat(info.z)
-                const fallbackPrice = parseFloat(info.y)
-                const actualPrice = !isNaN(price) && price > 0 ? price : fallbackPrice
-                if (!isNaN(actualPrice) && actualPrice > 0) {
-                  return { i, partial: { name: info.n?.trim() || code, price: actualPrice, isETF: code.startsWith('00') && code.length >= 4, exchange: ex, loading: false, error: '' } }
-                }
-              }
-            } catch { /* continue */ }
-          }
+          // Route 內部自動處理 .TW → .TWO fallback
+          void knownExchange // 保留參數但不需要手動切換
+          try {
+            const param = `tse_${code}.tw`
+            const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(param)}`)
+            const data = await res.json()
+            if (data.stocks && data.stocks.length > 0) {
+              const s = data.stocks[0]
+              return { i, partial: { name: s.name || code, price: s.price, isETF: code.startsWith('00') && code.length >= 4, exchange: s.exchange as 'tse' | 'otc', loading: false, error: '' } }
+            }
+          } catch { /* continue */ }
           return { i, partial: { loading: false, error: '查詢失敗' } }
         })
       )
@@ -199,29 +193,21 @@ function PortfolioCalculatorPage() {
       if (!code) return {}
 
       try {
-        const exchanges = ['tse', 'otc'] as const
-        for (const ex of exchanges) {
-          const param = `${ex}_${code}.tw`
-          const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(param)}`)
-          const data = await res.json()
+        // Route 內部自動處理 .TW → .TWO fallback，一次查詢即可
+        const param = `tse_${code}.tw`
+        const res = await fetch(`/api/stock-price?codes=${encodeURIComponent(param)}`)
+        const data = await res.json()
 
-          if (data.msgArray && data.msgArray.length > 0) {
-            const info = data.msgArray[0]
-            const price = parseFloat(info.z)
-            const fallbackPrice = parseFloat(info.y)
-            const actualPrice = !isNaN(price) && price > 0 ? price : fallbackPrice
-
-            if (!isNaN(actualPrice) && actualPrice > 0) {
-              const isETF = code.startsWith('00') && code.length >= 4
-              return {
-                name: info.n?.trim() || code,
-                price: actualPrice,
-                isETF,
-                exchange: ex,
-                loading: false,
-                error: '',
-              }
-            }
+        if (data.stocks && data.stocks.length > 0) {
+          const s = data.stocks[0]
+          const isETF = code.startsWith('00') && code.length >= 4
+          return {
+            name: s.name || code,
+            price: s.price,
+            isETF,
+            exchange: s.exchange as 'tse' | 'otc',
+            loading: false,
+            error: '',
           }
         }
         return { name: '', price: 0, loading: false, error: '找不到此股票代碼' }
