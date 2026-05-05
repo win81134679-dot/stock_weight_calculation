@@ -4,15 +4,17 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
- * Yahoo Finance v7/quote 批次 API — 防限流五大策略：
- * 1. 批次請求：一次最多 40 symbol，大幅減少 HTTP 請求總數
- * 2. 瀏覽器標頭：模擬真實瀏覽器，降低被偵測為 bot 的機率
- * 3. 指數退避重試：遇到 429 Too Many Requests 自動等待後重試
- * 4. 批次間保護延遲：每批次間隔 200ms，避免爆量送出
- * 5. 正確 prevClose 欄位：v7 的 regularMarketPreviousClose 永遠準確
+ * 股價 API — 雙層資料源架構
+ *
+ * 主要：TWSE 台灣證券交易所官方即時 API
+ *   - 不需認證、不被 Vercel 伺服器 IP 封鎖
+ *   - 同時支援上市 (tse) 和上櫃 (otc)
+ *   - 提供昨收 (y 欄位) 和即時成交 (z 欄位)
+ *
+ * 備用：Yahoo Finance v8/finance/chart（逐支查詢）
+ *   - 當 TWSE 找不到某代碼時啟用
+ *   - 使用正確的 chartPreviousClose 欄位
  */
-const BATCH_SIZE = 40
-const RETRY_DELAYS = [0, 800, 2000] as const
 
 interface QuoteResult {
   code: string
@@ -27,82 +29,132 @@ function extractCode(raw: string): string {
   return raw.replace(/^(?:tse|otc)_/i, '').replace(/\.tw$/i, '').trim().toUpperCase()
 }
 
-/** 模擬正常瀏覽器標頭，降低被限流機率 */
-const BROWSER_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'application/json, text/plain, */*',
-  'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-  'Referer': 'https://finance.yahoo.com/',
-  'sec-fetch-dest': 'empty',
-  'sec-fetch-mode': 'cors',
-  'sec-fetch-site': 'same-site',
-} as const
+// ──────────────────────────────────────────────────────────────────
+// 主要資料源：TWSE 官方 API
+// ──────────────────────────────────────────────────────────────────
 
-/** 帶退避重試的 fetch：遇到 429 自動等待後重試最多 3 次 */
-async function fetchWithRetry(url: string): Promise<Response | null> {
-  for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]))
-    try {
-      const res = await fetch(url, { headers: BROWSER_HEADERS, cache: 'no-store' })
-      if (res.status === 429) continue // rate limited → retry
-      if (!res.ok) return null
-      return res
-    } catch {
-      if (attempt === RETRY_DELAYS.length - 1) return null
-    }
-  }
-  return null
+interface TWSEItem {
+  c: string   // 代號
+  n: string   // 名稱
+  ex: string  // 'tse' | 'otc'
+  z: string   // 成交價（休市時為 '-'）
+  y: string   // 昨收
 }
 
 /**
- * v7/finance/quote 批次 API —— 一次請求取得所有股票即時報價
- * 比 v8/chart 快：不需 N 次串接請求，一個批次即完成
+ * 批次向 TWSE 查詢即時報價。
+ * 每個代碼同時嘗試 tse_ 與 otc_ 前綴，API 只回傳有效者。
  */
-async function batchFetchQuotes(symbols: string[]): Promise<Map<string, QuoteResult>> {
+async function fetchTWSEQuotes(codes: string[]): Promise<Map<string, QuoteResult>> {
   const result = new Map<string, QuoteResult>()
-  if (symbols.length === 0) return result
+  if (codes.length === 0) return result
 
-  for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 200)) // 批次間保護延遲
-    const chunk = symbols.slice(i, i + BATCH_SIZE)
-    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(chunk.join(','))}&fields=regularMarketPrice,regularMarketPreviousClose,shortName,marketState&lang=zh-TW&region=TW&formatted=false`
+  // 每個代碼都嘗試兩個交易所前綴，讓 TWSE 自動過濾無效者
+  const exChList = codes.flatMap((c) => [
+    `tse_${c.toLowerCase()}.tw`,
+    `otc_${c.toLowerCase()}.tw`,
+  ])
 
-    const res = await fetchWithRetry(url)
-    if (!res) continue
+  const CHUNK = 60 // TWSE 建議每次查詢不超過此數量
+  for (let i = 0; i < exChList.length; i += CHUNK) {
+    const chunk = exChList.slice(i, i + CHUNK)
+    const exCh = chunk.join('|')
+    const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${exCh}&json=1&delay=0`
 
     try {
-      const data = await res.json() as {
-        quoteResponse?: {
-          result?: Array<{
-            symbol: string
-            regularMarketPrice?: number
-            regularMarketPreviousClose?: number
-            shortName?: string
-            marketState?: string
-          }>
-        }
-      }
-      for (const q of (data?.quoteResponse?.result ?? [])) {
-        const sym = (q.symbol ?? '').toUpperCase()
-        const isTWO = sym.endsWith('.TWO')
-        const code = sym.replace(/\.(TW|TWO)$/, '')
-        const price = q.regularMarketPrice ?? 0
-        const prevClose = q.regularMarketPreviousClose ?? 0
+      const res = await fetch(url, {
+        headers: {
+          'Accept': 'application/json, text/plain, */*',
+          'Referer': 'https://mis.twse.com.tw/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) continue
+
+      const data = await res.json() as { msgArray?: TWSEItem[] }
+      for (const item of (data?.msgArray ?? [])) {
+        const code = (item.c ?? '').trim().toUpperCase()
+        if (!code || result.has(code)) continue
+
+        const prevClose = parseFloat(item.y)
+        const isOpen = item.z !== '-' && item.z !== '' && !isNaN(parseFloat(item.z))
+        const price = isOpen ? parseFloat(item.z) : prevClose
+
         if (price > 0) {
           result.set(code, {
             code,
-            name: (q.shortName ?? '').trim() || code,
+            name: (item.n ?? '').trim() || code,
             price,
-            prevClose: prevClose > 0 ? prevClose : 0,
-            exchange: isTWO ? 'otc' : 'tse',
-            isMarketOpen: q.marketState === 'REGULAR',
+            prevClose: isOpen && prevClose > 0 ? prevClose : 0,
+            exchange: item.ex === 'otc' ? 'otc' : 'tse',
+            isMarketOpen: isOpen,
           })
         }
       }
-    } catch { /* ignore parse errors */ }
+    } catch { /* 忽略單批次錯誤，繼續下一批 */ }
   }
+
   return result
 }
+
+// ──────────────────────────────────────────────────────────────────
+// 備用資料源：Yahoo Finance v8/chart（單支查詢）
+// ──────────────────────────────────────────────────────────────────
+
+async function fetchYahooFallback(symbol: string): Promise<QuoteResult | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=2d`
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Referer': 'https://finance.yahoo.com/',
+      },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!res.ok) return null
+
+    const data = await res.json() as {
+      chart?: {
+        result?: Array<{
+          meta: {
+            regularMarketPrice?: number
+            chartPreviousClose?: number
+            shortName?: string
+            marketState?: string
+          }
+        }>
+      }
+    }
+
+    const meta = data?.chart?.result?.[0]?.meta
+    if (!meta) return null
+
+    const price = meta.regularMarketPrice ?? 0
+    if (price <= 0) return null
+
+    const isTWO = symbol.toUpperCase().endsWith('.TWO')
+    const code = symbol.replace(/\.(TW|TWO)$/i, '').toUpperCase()
+
+    return {
+      code,
+      name: (meta.shortName ?? '').trim() || code,
+      price,
+      prevClose: (meta.chartPreviousClose ?? 0) > 0 ? (meta.chartPreviousClose as number) : 0,
+      exchange: isTWO ? 'otc' : 'tse',
+      isMarketOpen: meta.marketState === 'REGULAR',
+    }
+  } catch {
+    return null
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Route Handler
+// ──────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -119,14 +171,14 @@ export async function GET(req: NextRequest) {
     const rawList = codesParam.split('|').map((s) => s.trim()).filter(Boolean)
     const codes = Array.from(new Set(rawList.map(extractCode)))
 
-    // 第一輪：全部試 .TW（上市、含字母代碼如 00988A 均適用）
-    const twResults = await batchFetchQuotes(codes.map((c) => `${c}.TW`))
+    // 第一輪：TWSE 官方 API（主要，不被 Vercel IP 封鎖）
+    const twseResult = await fetchTWSEQuotes(codes)
 
     const stocks: QuoteResult[] = []
     const notFound: string[] = []
 
     for (const code of codes) {
-      const hit = twResults.get(code)
+      const hit = twseResult.get(code)
       if (hit) {
         stocks.push(hit)
       } else {
@@ -134,12 +186,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 第二輪：.TW 找不到的改試 .TWO（上櫃）
+    // 第二輪：TWSE 找不到的改用 Yahoo Finance v8/chart（備用）
     if (notFound.length > 0) {
-      const twoResults = await batchFetchQuotes(notFound.map((c) => `${c}.TWO`))
-      for (const code of notFound) {
-        const hit = twoResults.get(code)
-        if (hit) stocks.push(hit)
+      const fallbackTasks = notFound.flatMap((code) => [
+        fetchYahooFallback(`${code}.TW`),
+        fetchYahooFallback(`${code}.TWO`),
+      ])
+      const settled = await Promise.allSettled(fallbackTasks)
+      const seen = new Set<string>()
+      for (const r of settled) {
+        if (r.status === 'fulfilled' && r.value && !seen.has(r.value.code)) {
+          seen.add(r.value.code)
+          stocks.push(r.value)
+        }
       }
     }
 
@@ -147,7 +206,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : '未知錯誤'
     return NextResponse.json(
-      { error: `無法連線至 Yahoo Finance: ${message}` },
+      { error: `無法取得股價: ${message}` },
       { status: 502 }
     )
   }
