@@ -583,18 +583,19 @@ export default function PortfolioOverview({
         </div>
       )}
 
-      {/* 損益歷史 Area Chart */}
-      {snapshots.length >= 2 && (
+      {/* 損益歷史 Area Chart（含「今日」盤中 tab） */}
+      {(snapshots.length >= 2 || tickerItems.some((i) => i.shares > 0)) && (
         <div className="glass-card p-4 animate-fade-up">
           <div className="mb-3">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">損益歷史</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">每日快照，未實現損益趨勢</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">每日快照趨勢 · 今日盤中小時走勢</p>
           </div>
           <PnLHistoryChart
             snapshots={snapshots}
             accountId={selectedAccountId === '__all__' ? null : selectedAccountId}
             accounts={accounts}
             onDeleteSnapshot={onDeleteSnapshot}
+            tickerItems={tickerItems}
           />
         </div>
       )}

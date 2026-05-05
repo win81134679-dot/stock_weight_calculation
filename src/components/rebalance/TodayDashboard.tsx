@@ -40,6 +40,7 @@ import type { PriceCache } from '@/lib/types'
 interface NavPoint {
   t: string   // "HH:MM"
   v: number   // 今日 P&L delta（相對昨收）
+  s?: Record<string, number>  // code → 個股今日損益（對映 sessionStorage 持久化）
 }
 
 interface Props {
@@ -174,6 +175,19 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
   // ── 盤中淨值追蹤 ────────────────────────────────────────────────
   const totalDelta = stats?.totalDelta ?? 0
 
+  // prices 中最新的 fetchedAt 時間戳；每次 API 回來此值必改，用作 effect 觸發器
+  const latestFetchAt = useMemo(() => {
+    const vals = Object.values(prices)
+    if (vals.length === 0) return 0
+    return Math.max(...vals.map((p) => p.fetchedAt))
+  }, [prices])
+
+  // 用 ref 存最新值，避免 effect 中 stale closure
+  const totalDeltaRef = useRef(0)
+  totalDeltaRef.current = totalDelta
+  const tickerItemsRef = useRef(tickerItems)
+  tickerItemsRef.current = tickerItems
+
   useEffect(() => {
     // 初始化：從 sessionStorage 載入今天的紀錄
     const stored = loadNavPoints()
@@ -182,20 +196,29 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
   }, [])
 
   useEffect(() => {
-    if (!isMarketHours || totalDelta === 0) return
+    // 每次 API 回來（latestFetchAt 改變）就記一筆，不依賴數值是否改變
+    if (latestFetchAt === 0) return
+    const validItems = tickerItemsRef.current.filter((i) => i.shares > 0 && i.prevClose > 0)
+    if (validItems.length === 0) return  // prevClose 尚未載入，跳過
+
+    const delta = totalDeltaRef.current
     const now = new Date()
     const t = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+    // 同時記錄各股個別損益，供 PnLHistoryChart「今日」tab 使用
+    const stocksSnap: Record<string, number> = {}
+    validItems.forEach((i) => { stocksSnap[i.code] = i.todayChange })
+
     const pts = navRef.current
     const last = pts[pts.length - 1]
-    // 同一分鐘更新，只覆蓋最後一筆
     if (last?.t === t) {
-      pts[pts.length - 1] = { t, v: totalDelta }
+      pts[pts.length - 1] = { t, v: delta, s: stocksSnap }
     } else {
-      pts.push({ t, v: totalDelta })
+      pts.push({ t, v: delta, s: stocksSnap })
     }
     saveNavPoints(pts)
     setNavSeries([...pts])
-  }, [totalDelta, isMarketHours])
+  }, [latestFetchAt])  // ← 依賴 API 刷新時間，每 30s 必跑
 
   // ── 個股貢獻資料 ────────────────────────────────────────────────
   const contribData = useMemo(() => {
