@@ -352,8 +352,11 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
         </div>
 
         {navSeries.length < 2 ? (
-          <div className="h-36 flex items-center justify-center text-slate-300 text-sm">
-            {isMarketHours ? '等待資料累積中…（每分鐘更新）' : '開市後自動記錄'}
+          <div className="h-36 flex flex-col items-center justify-center gap-1.5 text-slate-300 text-sm">
+            <span>{latestFetchAt === 0 ? '載入報價中…' : '等待資料累積中…'}</span>
+            {latestFetchAt > 0 && (
+              <span className="text-[11px] text-slate-200">已載入 1 筆，再等 30 秒即可顯示</span>
+            )}
           </div>
         ) : (
           <div className="h-44">
