@@ -51,6 +51,7 @@ export default function HoldingTickerBoard({ items, isMarketHours }: HoldingTick
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
         {sorted.map((item) => {
           const noPriceData = item.price === 0
+          const noChangeData = item.prevClose === 0
           const isUp = item.todayChange >= 0
           const isPnlUp = item.pnl >= 0
 
@@ -58,7 +59,7 @@ export default function HoldingTickerBoard({ items, isMarketHours }: HoldingTick
             <div
               key={`${item.code}`}
               className={`relative rounded-xl border p-3 transition-all ${
-                noPriceData
+                noPriceData || noChangeData
                   ? 'bg-white border-slate-100'
                   : isUp
                   ? 'bg-emerald-50/70 border-emerald-200'
@@ -80,6 +81,8 @@ export default function HoldingTickerBoard({ items, isMarketHours }: HoldingTick
                 className={`text-xl font-mono font-black leading-none mb-1 ${
                   noPriceData
                     ? 'text-slate-400'
+                    : noChangeData
+                    ? 'text-[#1A1A2E]'
                     : isUp
                     ? 'text-emerald-700'
                     : 'text-red-600'
@@ -89,7 +92,7 @@ export default function HoldingTickerBoard({ items, isMarketHours }: HoldingTick
               </p>
 
               {/* Today's change row */}
-              {!noPriceData && (
+              {!noPriceData && !noChangeData && (
                 <div
                   className={`flex items-center gap-1 text-xs font-mono font-bold mb-2 ${
                     isUp ? 'text-emerald-600' : 'text-red-500'

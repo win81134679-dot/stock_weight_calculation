@@ -81,7 +81,7 @@ export default function StockPerfCard({
           </div>
           <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[120px]">{name}</div>
         </div>
-        {hasPrice && (
+        {hasPrice && prevClose > 0 && (
           <div className={`shrink-0 text-xs font-mono font-semibold px-1.5 py-0.5 rounded-md ${
             isDayUp ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
           }`}>
