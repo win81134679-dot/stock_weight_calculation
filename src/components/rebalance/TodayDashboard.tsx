@@ -44,6 +44,15 @@ interface NavPoint {
   s?: Record<string, number>  // code → 個股今日損益（對映 sessionStorage 持久化）
 }
 
+interface KBarPoint {
+  time: string  // "HH:MM"
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
 interface Props {
   tickerItems: TickerItem[]
   prices: Record<string, PriceCache>
@@ -150,6 +159,7 @@ function BubbleTooltip({ active, payload }: BubbleTooltipProps) {
 
 export default function TodayDashboard({ tickerItems, prices, isMarketHours }: Props) {
   const [navSeries, setNavSeries] = useState<NavPoint[]>([])
+  const [kbarBars, setKbarBars] = useState<Record<string, KBarPoint[]>>({})
   const navRef = useRef<NavPoint[]>([])
 
   // ── 計算今日核心指標 ────────────────────────────────────────────
@@ -189,6 +199,33 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
   const tickerItemsRef = useRef(tickerItems)
   tickerItemsRef.current = tickerItems
 
+  // ── KBar → NavPoint 轉換（各股分鐘收盤 × 持股數 × 昨收差）─────────
+  const kbarSeries = useMemo<NavPoint[]>(() => {
+    const validItems = tickerItems.filter((i) => i.shares > 0 && i.prevClose > 0)
+    if (validItems.length === 0 || Object.keys(kbarBars).length === 0) return []
+    const timeMap = new Map<string, NavPoint>()
+    validItems.forEach((item) => {
+      const bars = kbarBars[item.code]
+      if (!bars?.length) return
+      bars.forEach((bar) => {
+        const existing = timeMap.get(bar.time) ?? { t: bar.time, v: 0, s: {} }
+        const delta = (bar.close - item.prevClose) * item.shares
+        existing.v += delta
+        existing.s = { ...existing.s, [item.code]: delta }
+        timeMap.set(bar.time, existing)
+      })
+    })
+    return Array.from(timeMap.values()).sort((a, b) => a.t.localeCompare(b.t))
+  }, [kbarBars, tickerItems])
+
+  // ── 合併：KBar 歷史 + 即時輪詢點（polling 覆蓋同分鐘 KBar）────────
+  const displaySeries = useMemo<NavPoint[]>(() => {
+    const map = new Map<string, NavPoint>()
+    kbarSeries.forEach((p) => map.set(p.t, p))
+    navSeries.forEach((p) => map.set(p.t, p))
+    return Array.from(map.values()).sort((a, b) => a.t.localeCompare(b.t))
+  }, [kbarSeries, navSeries])
+
   useEffect(() => {
     // 初始化：從 sessionStorage 載入今天的紀錄
     const stored = loadNavPoints()
@@ -220,6 +257,30 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
     saveNavPoints(pts)
     setNavSeries([...pts])
   }, [latestFetchAt])  // ← 依賴 API 刷新時間，每 30s 必跑
+
+  // ── FinMind KBar 盤中分鐘走勢 ────────────────────────────────────
+  useEffect(() => {
+    async function loadKBar() {
+      const codes = tickerItemsRef.current
+        .filter((i) => i.shares > 0)
+        .map((i) => i.code)
+      if (codes.length === 0) return
+      const today = new Date().toISOString().split('T')[0]
+      try {
+        const res = await fetch(
+          `/api/stock-kbar?codes=${encodeURIComponent(codes.join('|'))}&date=${today}`,
+        )
+        if (!res.ok) return
+        const json = await res.json() as { bars?: Record<string, KBarPoint[]> }
+        if (json.bars && Object.keys(json.bars).length > 0) {
+          setKbarBars(json.bars)
+        }
+      } catch { /* silent — KBar 失敗不影響主流程 */ }
+    }
+    loadKBar()
+    const id = setInterval(loadKBar, 5 * 60 * 1000)  // 每 5 分鐘更新
+    return () => clearInterval(id)
+  }, [])  // 掛載一次；tickerItemsRef 用 ref 讀取，避免重複觸發
 
   // ── 個股貢獻資料 ────────────────────────────────────────────────
   const contribData = useMemo(() => {
@@ -355,7 +416,10 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">盤中淨值走勢</p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-            每 30 秒刷新 · 今日損益變化（台灣時間）
+              FinMind 分K + 輪詢 · 今日損益變化（台灣時間）
+              {Object.keys(kbarBars).length > 0 && (
+                <span className="ml-1 text-blue-400">· KBar {Object.values(kbarBars)[0]?.length ?? 0} 筆</span>
+              )}
               {!isMarketHours && <span className="ml-1 text-amber-500">· 非交易時段</span>}
             </p>
           </div>
@@ -373,17 +437,23 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
           )}
         </div>
 
-        {navSeries.length < 2 ? (
+        {displaySeries.length < 2 ? (
           <div className="h-36 flex flex-col items-center justify-center gap-1.5 text-slate-300 text-sm">
-            <span>{latestFetchAt === 0 ? '載入報價中…' : '等待資料累積中…'}</span>
-            {latestFetchAt > 0 && (
+            <span>
+              {latestFetchAt === 0
+                ? '載入報價中…'
+                : Object.keys(kbarBars).length > 0
+                  ? '等待報價更新…'
+                  : '等待資料累積中…'}
+            </span>
+            {latestFetchAt > 0 && Object.keys(kbarBars).length === 0 && (
               <span className="text-[11px] text-slate-200">已載入 1 筆，再等 30 秒即可顯示</span>
             )}
           </div>
         ) : (
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={navSeries} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
+              <AreaChart data={displaySeries} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="navGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={isUp ? '#10b981' : '#ef4444'} stopOpacity={0.2} />
