@@ -26,7 +26,7 @@ import StockPerfCard from './StockPerfCard'
 import LivePriceStatus from './LivePriceStatus'
 import TaiexCard from './TaiexCard'
 import HoldingTickerBoard, { TickerItem } from './HoldingTickerBoard'
-import DayContributionChart, { ContributionItem } from './DayContributionChart'
+import TodayDashboard from './TodayDashboard'
 import { resolveAccountConfig } from '@/lib/portfolio-store'
 
 const PIE_COLORS = ['#2C5F8A', '#4A90C4', '#60A5FA', '#34D399', '#F59E0B', '#F87171', '#A78BFA', '#FB923C']
@@ -286,13 +286,6 @@ export default function PortfolioOverview({
     })
   }, [displayPnL, holdings, prices, accounts, selectedAccountId])
 
-  // 今日貢獻度資料
-  const contributionItems = useMemo((): ContributionItem[] => {
-    return tickerItems
-      .filter((i) => i.shares > 0)
-      .map((i) => ({ code: i.code, contribution: i.todayChange }))
-  }, [tickerItems])
-
   // 加權指數資料
   const taiexPrice = prices['tse_t00.tw']
 
@@ -508,10 +501,12 @@ export default function PortfolioOverview({
         <HoldingTickerBoard items={tickerItems} isMarketHours={isMarketHours} />
       )}
 
-      {/* 今日貢獻度橫條圖 */}
-      {contributionItems.length > 0 && (
-        <DayContributionChart items={contributionItems} />
-      )}
+      {/* ─── 今日即時儀表板（盤中追蹤、個股貢獻、勝負分布、泡泡圖）─── */}
+      <TodayDashboard
+        tickerItems={tickerItems}
+        prices={prices}
+        isMarketHours={isMarketHours}
+      />
 
       {/* Bento Row 2: Treemap (2/3) + Pie (1/3) */}
       {holdingRows.length > 0 && (
