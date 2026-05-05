@@ -150,6 +150,18 @@ export interface AccountSnapshot {
   pnlPct: number
 }
 
+/** 每日個股明細（由 takeSnapshot 計算並附加於 PnLSnapshot） */
+export interface StockDailySnap {
+  code: string
+  name: string
+  shares: number
+  value: number           // 持倉市值
+  cost: number            // 持倉成本
+  pnl: number             // 未實現損益（vs 均價）
+  todayDelta: number      // 當日 Δ（vs prevClose）× shares
+  todayDeltaPct: number   // 當日漲跌% (prevClose-based)
+}
+
 /** PNL 快照（所有帳戶 + 合併） */
 export interface PnLSnapshot {
   date: string                        // ISO datetime
@@ -158,6 +170,7 @@ export interface PnLSnapshot {
   combinedValue: number
   combinedPnl: number
   combinedPnlPct: number
+  stocks?: StockDailySnap[]           // 個股明細（新版快照才有）
 }
 
 /** 全域 Portfolio 儲存結構 */

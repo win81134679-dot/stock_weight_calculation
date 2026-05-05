@@ -28,6 +28,12 @@ import TaiexCard from './TaiexCard'
 import HoldingTickerBoard, { TickerItem } from './HoldingTickerBoard'
 import TodayDashboard from './TodayDashboard'
 import { resolveAccountConfig } from '@/lib/portfolio-store'
+import PortfolioKpiCards from './PortfolioKpiCards'
+import MonthlyPnlChart from './MonthlyPnlChart'
+import HoldingRankChart from './HoldingRankChart'
+import DrawdownChart from './DrawdownChart'
+import StockContributionChart from './StockContributionChart'
+import ReturnHistogram from './ReturnHistogram'
 
 const PIE_COLORS = ['#2C5F8A', '#4A90C4', '#60A5FA', '#34D399', '#F59E0B', '#F87171', '#A78BFA', '#FB923C']
 
@@ -496,6 +502,15 @@ export default function PortfolioOverview({
         </div>
       )}
 
+      {/* KPI 摘要卡片列 */}
+      {(snapshots.length >= 1 || tickerItems.length > 0) && (
+        <PortfolioKpiCards
+          snapshots={snapshots}
+          tickerItems={tickerItems}
+          accountId={selectedAccountId === '__all__' ? null : selectedAccountId}
+        />
+      )}
+
       {/* 個股即時看板 */}
       {tickerItems.length > 0 && (
         <HoldingTickerBoard items={tickerItems} isMarketHours={isMarketHours} />
@@ -597,6 +612,61 @@ export default function PortfolioOverview({
             onDeleteSnapshot={onDeleteSnapshot}
             tickerItems={tickerItems}
           />
+        </div>
+      )}
+
+      {/* 進階分析圖表區（月度損益 / 個股排行 / 回撤 / 貢獻 / 直方圖） */}
+      {snapshots.length >= 2 && (
+        <div className="space-y-3">
+
+          {/* 月度損益 + 個股持倉排行 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="glass-card p-4 animate-fade-up">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">月度損益</p>
+              <p className="text-[11px] text-slate-400 mb-3">本月末 vs 上月末 市值 Δ</p>
+              <MonthlyPnlChart
+                snapshots={snapshots}
+                accountId={selectedAccountId === '__all__' ? null : selectedAccountId}
+              />
+            </div>
+            <div className="glass-card p-4 animate-fade-up">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">個股持倉排行</p>
+              <p className="text-[11px] text-slate-400 mb-3">依市值降序 · 含今日漲跌</p>
+              <HoldingRankChart tickerItems={tickerItems} />
+            </div>
+          </div>
+
+          {/* 回撤水位圖 + 日報酬率直方圖 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="glass-card p-4 animate-fade-up">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">回撤水位圖</p>
+              <p className="text-[11px] text-slate-400 mb-3">持續追蹤每日回撤幅度</p>
+              <DrawdownChart
+                snapshots={snapshots}
+                accountId={selectedAccountId === '__all__' ? null : selectedAccountId}
+              />
+            </div>
+            <div className="glass-card p-4 animate-fade-up">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">日報酬率分布</p>
+              <p className="text-[11px] text-slate-400 mb-3">常態分布曲線疊加</p>
+              <ReturnHistogram
+                snapshots={snapshots}
+                accountId={selectedAccountId === '__all__' ? null : selectedAccountId}
+              />
+            </div>
+          </div>
+
+          {/* 每日個股貢獻% 堆疊面積圖 */}
+          <div className="glass-card p-4 animate-fade-up">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">每日個股貢獻</p>
+            <p className="text-[11px] text-slate-400 mb-3">各股當日 Δ 堆疊面積 · 正負分開（stackOffset sign）</p>
+            <StockContributionChart
+              snapshots={snapshots}
+              tickerItems={tickerItems}
+              topN={10}
+            />
+          </div>
+
         </div>
       )}
 

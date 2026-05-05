@@ -3,7 +3,7 @@
  * PNL snapshot management — take & persist point-in-time portfolio snapshots.
  */
 
-import { PnLSnapshot, PortfolioStore, PriceCache } from './types'
+import { PnLSnapshot, PortfolioStore, PriceCache, StockDailySnap } from './types'
 import { addSnapshot } from './portfolio-store'
 
 /**
@@ -40,6 +40,36 @@ export function takeSnapshot(
   const combinedValue = accountSnapshots.reduce((s, a) => s + a.totalValue, 0)
   const combinedPnl = combinedValue - combinedCost
 
+  // 逐股明細（合併跨帳戶同代碼）
+  const stockMap = new Map<string, StockDailySnap>()
+  for (const h of holdings) {
+    const pc = prices[h.code]
+    if (!pc || h.shares <= 0) continue
+    const value = h.shares * pc.price
+    const cost = h.shares * h.avgCost
+    const todayDelta = pc.prevClose > 0 ? (pc.price - pc.prevClose) * h.shares : 0
+    const todayDeltaPct = pc.prevClose > 0 ? ((pc.price - pc.prevClose) / pc.prevClose) * 100 : 0
+    const existing = stockMap.get(h.code)
+    if (existing) {
+      existing.shares += h.shares
+      existing.value += value
+      existing.cost += cost
+      existing.pnl += value - cost
+      existing.todayDelta += todayDelta
+    } else {
+      stockMap.set(h.code, {
+        code: h.code,
+        name: h.name,
+        shares: h.shares,
+        value,
+        cost,
+        pnl: value - cost,
+        todayDelta,
+        todayDeltaPct,
+      })
+    }
+  }
+
   return {
     date: new Date().toISOString(),
     accounts: accountSnapshots,
@@ -47,6 +77,7 @@ export function takeSnapshot(
     combinedValue,
     combinedPnl,
     combinedPnlPct: combinedCost > 0 ? (combinedPnl / combinedCost) * 100 : 0,
+    stocks: Array.from(stockMap.values()),
   }
 }
 
