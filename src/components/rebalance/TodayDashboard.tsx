@@ -29,6 +29,7 @@ import {
   ZAxis,
   CartesianGrid,
 } from 'recharts'
+import type { PieLabelRenderProps } from 'recharts'
 import { formatMoney } from '@/lib/calculator'
 import type { TickerItem } from './HoldingTickerBoard'
 import type { PriceCache } from '@/lib/types'
@@ -273,15 +274,13 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
   const RADIAN = Math.PI / 180
 
   // 甜甜圈 label
-  const renderPieLabel = ({
-    cx, cy, midAngle, innerRadius, outerRadius, name, value,
-  }: {
-    cx: number; cy: number; midAngle: number
-    innerRadius: number; outerRadius: number; name: string; value: number
-  }) => {
-    const r = innerRadius + (outerRadius - innerRadius) * 0.5
-    const x = cx + r * Math.cos(-midAngle * RADIAN)
-    const y = cy + r * Math.sin(-midAngle * RADIAN)
+  const renderPieLabel = (props: PieLabelRenderProps) => {
+    const { cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, name, value } = props
+    const cxN = Number(cx); const cyN = Number(cy)
+    const midN = Number(midAngle); const irN = Number(innerRadius); const orN = Number(outerRadius)
+    const r = irN + (orN - irN) * 0.5
+    const x = cxN + r * Math.cos(-midN * RADIAN)
+    const y = cyN + r * Math.sin(-midN * RADIAN)
     return (
       <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central"
         style={{ fontSize: 11, fontWeight: 700 }}>
@@ -469,8 +468,10 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
               <Bar dataKey="delta" radius={[0, 4, 4, 0]}
                 label={{
                   position: 'right',
-                  formatter: (v: number) =>
-                    `${v >= 0 ? '+' : ''}$${formatMoney(Math.abs(v))}`,
+                  formatter: (v: unknown) => {
+                    const n = typeof v === 'number' ? v : 0
+                    return `${n >= 0 ? '+' : ''}$${formatMoney(Math.abs(n))}`
+                  },
                   style: { fontSize: 10, fill: '#64748b' },
                 }}
               >
@@ -510,7 +511,7 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
                   ))}
                 </Pie>
                 <ReTooltip
-                  formatter={(value: number, name: string) => [value + ' 檔', name]}
+                  formatter={(value, name) => [(typeof value === 'number' ? value : 0) + ' 檔', name as string]}
                   contentStyle={{ fontSize: 12, borderRadius: 10, border: '1px solid #e2e8f0' }}
                 />
               </PieChart>

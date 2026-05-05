@@ -24,7 +24,7 @@ function getYYYYMM(isoDate: string): string {
 }
 
 function formatMonth(yyyymm: string): string {
-  const [y, m] = yyyymm.split('-')
+  const m = yyyymm.split('-')[1]
   return `${m}月`
 }
 
