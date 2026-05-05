@@ -333,7 +333,7 @@ export default function TodayDashboard({ tickerItems, prices, isMarketHours }: P
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">盤中淨值走勢</p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              每 60 秒刷新 · 今日損益變化（台灣時間）
+            每 30 秒刷新 · 今日損益變化（台灣時間）
               {!isMarketHours && <span className="ml-1 text-amber-500">· 非交易時段</span>}
             </p>
           </div>

@@ -11,8 +11,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { PriceCache } from '@/lib/types'
 import { isETF } from '@/lib/etf-codes'
 
-const PRICE_TTL_MS = 60_000 // 1 minute cache
-const POLL_INTERVAL_MS = 60_000
+const PRICE_TTL_MS = 30_000 // 30 秒快取（配合輪詢間隔）
+const POLL_INTERVAL_MS = 30_000 // 盤中每 30 秒刷新（Yahoo v8/chart 安全閾值）
 
 /** 判斷現在是否在台股交易時段（週一~五 09:00~13:30 台灣時間） */
 function isMarketHours(): boolean {
