@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import StockInput from '@/components/StockInput'
 import FeeSettings from '@/components/FeeSettings'
@@ -74,7 +75,7 @@ export default function Home() {
           </div>
 
           {/* Top-level tab selector */}
-          <div className="flex gap-2 mt-4">
+          <div className="flex flex-wrap gap-2 mt-4">
             <button
               onClick={() => setTopTab('rebalance')}
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
@@ -95,6 +96,12 @@ export default function Home() {
             >
               🧮 持倉計算
             </button>
+            <Link
+              href="/us"
+              className="px-4 py-2 rounded-xl text-sm font-semibold transition-colors bg-white/10 text-white border border-white/20 hover:bg-white/20"
+            >
+              🇺🇸 美股系統
+            </Link>
           </div>
         </div>
 
