@@ -133,6 +133,85 @@ export default function UsRebalanceTab() {
   ), [prices, store.accounts, store.allocationConfigs, store.holdings])
 
   const selectedSummary = accountSummaries.find((summary) => summary.accountId === selectedAccountId)
+  const combinedSummary = useMemo(() => {
+    const totalValueTwd = accountSummaries.reduce((sum, summary) => sum + summary.totalValueTwd, 0)
+    const totalValueUsd = accountSummaries.reduce((sum, summary) => sum + summary.totalValueUsd, 0)
+    const totalCostTwd = accountSummaries.reduce((sum, summary) => sum + summary.totalCostTwd, 0)
+    const totalPnlTwd = accountSummaries.reduce((sum, summary) => sum + summary.totalPnlTwd, 0)
+    const totalPnlUsd = accountSummaries.reduce((sum, summary) => sum + summary.totalPnlUsd, 0)
+    const totalDividendsUsd = store.dividends.reduce((sum, dividend) => sum + dividend.totalCashUsd, 0)
+    const holdingsCount = store.holdings.length
+    const accountsCount = store.accounts.length
+    const pnlPct = totalCostTwd > 0 ? (totalPnlTwd / totalCostTwd) * 100 : 0
+    return {
+      totalValueTwd,
+      totalValueUsd,
+      totalCostTwd,
+      totalPnlTwd,
+      totalPnlUsd,
+      totalDividendsUsd,
+      holdingsCount,
+      accountsCount,
+      pnlPct,
+    }
+  }, [accountSummaries, store.dividends, store.holdings.length, store.accounts.length])
+
+  const combinedHoldings = useMemo(() => {
+    const grouped = new Map<string, {
+      symbol: string
+      name: string
+      shares: number
+      valueTwd: number
+      valueUsd: number
+      pnlTwd: number
+      avgCostUsd: number
+      priceUsd: number
+      accounts: Set<string>
+    }>()
+
+    accountSummaries.forEach((summary) => {
+      summary.holdings.forEach((holding) => {
+        const existing = grouped.get(holding.symbol)
+        if (existing) {
+          existing.shares += holding.shares
+          existing.valueTwd += holding.valueTwd
+          existing.valueUsd += holding.valueUsd
+          existing.pnlTwd += holding.pnlTwd
+          existing.accounts.add(summary.accountName)
+          return
+        }
+        grouped.set(holding.symbol, {
+          symbol: holding.symbol,
+          name: holding.name,
+          shares: holding.shares,
+          valueTwd: holding.valueTwd,
+          valueUsd: holding.valueUsd,
+          pnlTwd: holding.pnlTwd,
+          avgCostUsd: holding.avgCostUsd,
+          priceUsd: holding.priceUsd,
+          accounts: new Set([summary.accountName]),
+        })
+      })
+    })
+
+    return Array.from(grouped.values())
+      .sort((a, b) => b.valueTwd - a.valueTwd)
+  }, [accountSummaries])
+
+  const recentTransactions = useMemo(() => {
+    return store.transactions
+      .slice()
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 8)
+  }, [store.transactions])
+
+  const recentDividends = useMemo(() => {
+    return store.dividends
+      .slice()
+      .sort((a, b) => b.exDate.localeCompare(a.exDate))
+      .slice(0, 8)
+  }, [store.dividends])
+
   const deviationSummary = useMemo(() => {
     if (!selectedAccount || !(fxRate > 0) || !resolvedConfig) return null
     return calcUsDeviationInvestment(
@@ -293,6 +372,14 @@ export default function UsRebalanceTab() {
     setManualDividendCash('')
   }, [addDividend, manualDividendCash, manualDividendDate, manualDividendSymbol, selectedAccountId, store.holdings])
 
+  const handleCreateAccount = useCallback(() => {
+    const name = newAccountName.trim()
+    if (!name) return
+    addAccount(name, newAccountBroker.trim() || undefined)
+    setNewAccountName('')
+    setNewAccountBroker('')
+  }, [addAccount, newAccountBroker, newAccountName])
+
   if (!mounted) {
     return <div className="h-32 rounded-2xl bg-slate-100 animate-pulse" />
   }
@@ -327,69 +414,281 @@ export default function UsRebalanceTab() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {accountSummaries.map((summary) => (
-              <div key={summary.accountId} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-[#1A1A2E]">{summary.accountName}</div>
-                  <div className="text-xs text-slate-400">{summary.holdings.length} 檔</div>
+          {store.accounts.length === 0 ? (
+            <div className="rounded-2xl border border-[#2C5F8A]/15 bg-gradient-to-br from-[#F7FBFF] to-white p-5 shadow-sm">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                <div className="max-w-2xl">
+                  <div className="text-xs font-bold text-[#2C5F8A] uppercase tracking-widest mb-2">Quick Start</div>
+                  <h3 className="text-xl font-black text-[#1A1A2E]">先建立第一個美股帳戶，總覽才會開始有資料</h3>
+                  <p className="text-sm text-slate-500 mt-2">
+                    目前美股系統已經有獨立的帳戶、配置、持倉、交易、股利、偏差投入與再平衡流程。
+                    你現在只差第一步：先建一個帳戶，接著就能直接輸入持倉或交易紀錄。
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    <button
+                      onClick={() => setActiveTab('holdings')}
+                      className="px-4 py-2 rounded-xl bg-[#2C5F8A] text-white text-sm font-semibold"
+                    >
+                      到資料管理完整設定
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('settings')}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600"
+                    >
+                      先調整費率模板
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                  <Metric label="市值 TWD" value={`NT$${formatTwd(summary.totalValueTwd)}`} />
-                  <Metric label="市值 USD" value={`USD ${formatUsd(summary.totalValueUsd)}`} />
-                  <Metric label="損益 TWD" value={`${summary.totalPnlTwd >= 0 ? '+' : '-'}NT$${formatTwd(Math.abs(summary.totalPnlTwd))}`} />
-                  <Metric label="損益 %" value={`${summary.totalPnlPct >= 0 ? '+' : ''}${summary.totalPnlPct.toFixed(2)}%`} />
+                <div className="w-full lg:max-w-md rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="font-semibold text-[#1A1A2E] mb-3">建立帳戶</div>
+                  <div className="space-y-3">
+                    <input
+                      value={newAccountName}
+                      onChange={(e) => setNewAccountName(e.target.value)}
+                      placeholder="例如：凱基美股主帳戶"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                    />
+                    <input
+                      value={newAccountBroker}
+                      onChange={(e) => setNewAccountBroker(e.target.value)}
+                      placeholder="券商（選填）"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                    />
+                    <button
+                      onClick={handleCreateAccount}
+                      className="w-full rounded-xl bg-[#2C5F8A] text-white text-sm font-semibold px-4 py-2.5"
+                    >
+                      建立第一個帳戶
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-
-          {selectedSummary && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-semibold text-[#1A1A2E]">{selectedSummary.accountName} 持倉明細</div>
-                <select
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                  className="text-sm border border-slate-200 rounded-lg px-2 py-1.5"
-                >
-                  {store.accounts.map((account) => (
-                    <option key={account.id} value={account.id}>{account.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-[11px] text-slate-400 uppercase tracking-wider border-b border-slate-200">
-                      <th className="text-left py-2 px-2">股票</th>
-                      <th className="text-right py-2 px-2">股數</th>
-                      <th className="text-right py-2 px-2">均價 USD</th>
-                      <th className="text-right py-2 px-2">現價 USD</th>
-                      <th className="text-right py-2 px-2">市值 TWD</th>
-                      <th className="text-right py-2 px-2">損益</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedSummary.holdings.map((holding) => (
-                      <tr key={holding.symbol} className="border-b border-slate-100">
-                        <td className="py-2 px-2">
-                          <div className="font-medium">{holding.name}</div>
-                          <div className="text-[11px] text-slate-400">{holding.symbol}</div>
-                        </td>
-                        <td className="text-right py-2 px-2">{holding.shares.toLocaleString()}</td>
-                        <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.avgCostUsd)}</td>
-                        <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.priceUsd)}</td>
-                        <td className="text-right py-2 px-2 font-mono">NT${formatTwd(holding.valueTwd)}</td>
-                        <td className={`text-right py-2 px-2 font-mono ${holding.pnlTwd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                          {holding.pnlTwd >= 0 ? '+' : '-'}NT${formatTwd(Math.abs(holding.pnlTwd))}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                <MetricCard label="帳戶數" value={combinedSummary.accountsCount.toString()} />
+                <MetricCard label="持倉標的" value={combinedSummary.holdingsCount.toString()} />
+                <MetricCard label="總市值" value={`NT$${formatTwd(combinedSummary.totalValueTwd)}`} />
+                <MetricCard label="總損益" value={`${combinedSummary.totalPnlTwd >= 0 ? '+' : '-'}NT$${formatTwd(Math.abs(combinedSummary.totalPnlTwd))}`} />
+                <MetricCard label="已領股利" value={`USD ${formatUsd(combinedSummary.totalDividendsUsd)}`} />
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                    <div>
+                      <div className="font-semibold text-[#1A1A2E]">投資組合總覽</div>
+                      <div className="text-xs text-slate-400 mt-1">跨帳戶彙總後的美股資產狀況</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setActiveTab('holdings')}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600"
+                      >
+                        管理帳戶/持倉
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('invest')}
+                        className="px-3 py-1.5 rounded-lg bg-[#2C5F8A] text-white text-xs"
+                      >
+                        去做資金投入
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <Metric label="總成本 TWD" value={`NT$${formatTwd(combinedSummary.totalCostTwd)}`} />
+                    <Metric label="總市值 USD" value={`USD ${formatUsd(combinedSummary.totalValueUsd)}`} />
+                    <Metric label="總損益 USD" value={`${combinedSummary.totalPnlUsd >= 0 ? '+' : '-'}USD ${formatUsd(Math.abs(combinedSummary.totalPnlUsd))}`} />
+                    <Metric label="總報酬率" value={`${combinedSummary.pnlPct >= 0 ? '+' : ''}${combinedSummary.pnlPct.toFixed(2)}%`} />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-3">帳戶快速建立</div>
+                  <div className="space-y-3">
+                    <input
+                      value={newAccountName}
+                      onChange={(e) => setNewAccountName(e.target.value)}
+                      placeholder="帳戶名稱"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                    />
+                    <input
+                      value={newAccountBroker}
+                      onChange={(e) => setNewAccountBroker(e.target.value)}
+                      placeholder="券商（選填）"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                    />
+                    <button
+                      onClick={handleCreateAccount}
+                      className="w-full rounded-xl bg-[#2C5F8A] text-white text-sm font-semibold px-4 py-2.5"
+                    >
+                      新增帳戶
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {accountSummaries.map((summary) => {
+                  const account = store.accounts.find((item) => item.id === summary.accountId)
+                  const config = resolveUsAccountConfig(summary.accountId, store.allocationConfigs, store.accounts)
+                  return (
+                    <div key={summary.accountId} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold text-[#1A1A2E]">{summary.accountName}</div>
+                          <div className="text-xs text-slate-400 mt-1">
+                            {account?.broker ? `${account.broker} · ` : ''}{summary.holdings.length} 檔 · 配置 {config.name}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setSelectedAccountId(summary.accountId)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600"
+                        >
+                          選取
+                        </button>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                        <Metric label="市值 TWD" value={`NT$${formatTwd(summary.totalValueTwd)}`} />
+                        <Metric label="損益 %" value={`${summary.totalPnlPct >= 0 ? '+' : ''}${summary.totalPnlPct.toFixed(2)}%`} />
+                        <Metric label="市值 USD" value={`USD ${formatUsd(summary.totalValueUsd)}`} />
+                        <Metric label="下次再平衡" value={config.nextRebalanceDate} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {combinedHoldings.length > 0 && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <div className="font-semibold text-[#1A1A2E]">跨帳戶持倉排行</div>
+                      <div className="text-xs text-slate-400 mt-1">依台幣市值排序</div>
+                    </div>
+                    <div className="text-xs text-slate-400">共 {combinedHoldings.length} 檔</div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-[11px] text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                          <th className="text-left py-2 px-2">股票</th>
+                          <th className="text-left py-2 px-2">帳戶</th>
+                          <th className="text-right py-2 px-2">總股數</th>
+                          <th className="text-right py-2 px-2">現價 USD</th>
+                          <th className="text-right py-2 px-2">市值 TWD</th>
+                          <th className="text-right py-2 px-2">損益 TWD</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {combinedHoldings.map((holding) => (
+                          <tr key={holding.symbol} className="border-b border-slate-100">
+                            <td className="py-2 px-2">
+                              <div className="font-medium">{holding.name}</div>
+                              <div className="text-[11px] text-slate-400">{holding.symbol}</div>
+                            </td>
+                            <td className="py-2 px-2 text-xs text-slate-500">{Array.from(holding.accounts).join('、')}</td>
+                            <td className="text-right py-2 px-2">{holding.shares.toLocaleString()}</td>
+                            <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.priceUsd)}</td>
+                            <td className="text-right py-2 px-2 font-mono">NT$${formatTwd(holding.valueTwd)}</td>
+                            <td className={`text-right py-2 px-2 font-mono ${holding.pnlTwd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              {holding.pnlTwd >= 0 ? '+' : '-'}NT$${formatTwd(Math.abs(holding.pnlTwd))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <DataCard title="最近交易">
+                  <Table
+                    headers={['日期', '帳戶', 'Ticker', '類型', '股數', '價格']}
+                    rows={recentTransactions.map((tx) => ({
+                      key: tx.id,
+                      cells: [
+                        tx.date,
+                        store.accounts.find((account) => account.id === tx.accountId)?.name ?? tx.accountId,
+                        tx.symbol,
+                        tx.type === 'buy' ? '買入' : '賣出',
+                        tx.shares.toLocaleString(),
+                        `USD ${formatUsd(tx.priceUsd)}`,
+                      ],
+                    }))}
+                  />
+                </DataCard>
+
+                <DataCard title="最近股利">
+                  <Table
+                    headers={['除息日', '帳戶', 'Ticker', '每股 USD', '總額 USD']}
+                    rows={recentDividends.map((dividend) => ({
+                      key: dividend.id,
+                      cells: [
+                        dividend.exDate,
+                        store.accounts.find((account) => account.id === dividend.accountId)?.name ?? dividend.accountId,
+                        dividend.symbol,
+                        formatUsd(dividend.cashPerShareUsd),
+                        formatUsd(dividend.totalCashUsd),
+                      ],
+                    }))}
+                  />
+                </DataCard>
+              </div>
+
+              {selectedSummary && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                    <div>
+                      <div className="font-semibold text-[#1A1A2E]">{selectedSummary.accountName} 持倉明細</div>
+                      <div className="text-xs text-slate-400 mt-1">可切換帳戶查看該帳戶個別持倉</div>
+                    </div>
+                    <select
+                      value={selectedAccountId}
+                      onChange={(e) => setSelectedAccountId(e.target.value)}
+                      className="text-sm border border-slate-200 rounded-lg px-2 py-1.5"
+                    >
+                      {store.accounts.map((account) => (
+                        <option key={account.id} value={account.id}>{account.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-[11px] text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                          <th className="text-left py-2 px-2">股票</th>
+                          <th className="text-right py-2 px-2">股數</th>
+                          <th className="text-right py-2 px-2">均價 USD</th>
+                          <th className="text-right py-2 px-2">現價 USD</th>
+                          <th className="text-right py-2 px-2">市值 TWD</th>
+                          <th className="text-right py-2 px-2">損益</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedSummary.holdings.map((holding) => (
+                          <tr key={holding.symbol} className="border-b border-slate-100">
+                            <td className="py-2 px-2">
+                              <div className="font-medium">{holding.name}</div>
+                              <div className="text-[11px] text-slate-400">{holding.symbol}</div>
+                            </td>
+                            <td className="text-right py-2 px-2">{holding.shares.toLocaleString()}</td>
+                            <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.avgCostUsd)}</td>
+                            <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.priceUsd)}</td>
+                            <td className="text-right py-2 px-2 font-mono">NT$${formatTwd(holding.valueTwd)}</td>
+                            <td className={`text-right py-2 px-2 font-mono ${holding.pnlTwd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              {holding.pnlTwd >= 0 ? '+' : '-'}NT$${formatTwd(Math.abs(holding.pnlTwd))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -400,13 +699,8 @@ export default function UsRebalanceTab() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <input value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} placeholder="帳戶名稱" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
               <input value={newAccountBroker} onChange={(e) => setNewAccountBroker(e.target.value)} placeholder="券商（選填）" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
-              <button
-                onClick={() => {
-                  if (!newAccountName.trim()) return
-                  addAccount(newAccountName.trim(), newAccountBroker.trim() || undefined)
-                  setNewAccountName('')
-                  setNewAccountBroker('')
-                }}
+                <button
+                onClick={handleCreateAccount}
                 className="rounded-xl bg-[#2C5F8A] text-white text-sm font-semibold px-4 py-2.5"
               >
                 新增帳戶
