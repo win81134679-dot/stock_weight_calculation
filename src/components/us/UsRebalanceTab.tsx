@@ -21,6 +21,7 @@ import UsTreemapChart from './UsTreemapChart'
 import UsPnLHistoryChart from './UsPnLHistoryChart'
 import UsDrawdownChart from './UsDrawdownChart'
 import UsIndexCard from './UsIndexCard'
+import UsIntradayChart from './UsIntradayChart'
 import UsRebalanceSettings from './UsRebalanceSettings'
 
 type SubTab = 'overview' | 'holdings' | 'invest' | 'rebalance' | 'settings'
@@ -176,6 +177,8 @@ export default function UsRebalanceTab() {
       pnlTwd: number
       avgCostUsd: number
       priceUsd: number
+      todayChangePct: number
+      todayDeltaUsd: number
       accounts: Set<string>
     }>()
 
@@ -187,6 +190,7 @@ export default function UsRebalanceTab() {
           existing.valueTwd += holding.valueTwd
           existing.valueUsd += holding.valueUsd
           existing.pnlTwd += holding.pnlTwd
+          existing.todayDeltaUsd += holding.todayDeltaUsd
           existing.accounts.add(summary.accountName)
           return
         }
@@ -199,6 +203,8 @@ export default function UsRebalanceTab() {
           pnlTwd: holding.pnlTwd,
           avgCostUsd: holding.avgCostUsd,
           priceUsd: holding.priceUsd,
+          todayChangePct: holding.todayChangePct,
+          todayDeltaUsd: holding.todayDeltaUsd,
           accounts: new Set([summary.accountName]),
         })
       })
@@ -274,6 +280,21 @@ export default function UsRebalanceTab() {
       symbol: holding.symbol,
     }))
   }, [combinedHoldings])
+
+  // 盤中資金時間線用的持倉（跨帳戶合併同 symbol；昨收取自報價）
+  const intradayHoldings = useMemo(() => {
+    const grouped = new Map<string, { symbol: string; shares: number; prevCloseUsd: number }>()
+    store.holdings.forEach((holding) => {
+      const prevCloseUsd = prices[holding.symbol]?.prevCloseUsd ?? 0
+      const existing = grouped.get(holding.symbol)
+      if (existing) {
+        existing.shares += holding.shares
+      } else {
+        grouped.set(holding.symbol, { symbol: holding.symbol, shares: holding.shares, prevCloseUsd })
+      }
+    })
+    return Array.from(grouped.values()).filter((item) => item.shares > 0 && item.prevCloseUsd > 0)
+  }, [prices, store.holdings])
 
   // 在總覽分頁、有帳戶與報價時自動存每日快照
   useEffect(() => {
@@ -553,6 +574,12 @@ export default function UsRebalanceTab() {
 
               <UsIndexCard />
 
+              {/* 當日開盤資金時間線 */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="font-semibold text-[#1A1A2E] mb-2">當日資金時間線</div>
+                <UsIntradayChart holdings={intradayHoldings} fxRate={fxRate} />
+              </div>
+
               {/* 視覺化圖表 */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -679,6 +706,7 @@ export default function UsRebalanceTab() {
                           <th className="text-left py-2 px-2">帳戶</th>
                           <th className="text-right py-2 px-2">總股數</th>
                           <th className="text-right py-2 px-2">現價 USD</th>
+                          <th className="text-right py-2 px-2">今日漲跌</th>
                           <th className="text-right py-2 px-2">市值 TWD</th>
                           <th className="text-right py-2 px-2">損益 TWD</th>
                         </tr>
@@ -693,6 +721,10 @@ export default function UsRebalanceTab() {
                             <td className="py-2 px-2 text-xs text-slate-500">{Array.from(holding.accounts).join('、')}</td>
                             <td className="text-right py-2 px-2">{holding.shares.toLocaleString()}</td>
                             <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.priceUsd)}</td>
+                            <td className={`text-right py-2 px-2 font-mono ${holding.todayChangePct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              {holding.todayChangePct >= 0 ? '+' : ''}{holding.todayChangePct.toFixed(2)}%
+                              <div className="text-[10px] opacity-70">{holding.todayDeltaUsd >= 0 ? '+' : '-'}USD {formatUsd(Math.abs(holding.todayDeltaUsd))}</div>
+                            </td>
                             <td className="text-right py-2 px-2 font-mono">{`NT$${formatTwd(holding.valueTwd)}`}</td>
                             <td className={`text-right py-2 px-2 font-mono ${holding.pnlTwd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                               {holding.pnlTwd >= 0 ? '+' : '-'}{`NT$${formatTwd(Math.abs(holding.pnlTwd))}`}
@@ -765,6 +797,7 @@ export default function UsRebalanceTab() {
                           <th className="text-right py-2 px-2">股數</th>
                           <th className="text-right py-2 px-2">均價 USD</th>
                           <th className="text-right py-2 px-2">現價 USD</th>
+                          <th className="text-right py-2 px-2">今日漲跌</th>
                           <th className="text-right py-2 px-2">市值 TWD</th>
                           <th className="text-right py-2 px-2">損益</th>
                         </tr>
@@ -779,6 +812,10 @@ export default function UsRebalanceTab() {
                             <td className="text-right py-2 px-2">{holding.shares.toLocaleString()}</td>
                             <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.avgCostUsd)}</td>
                             <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.priceUsd)}</td>
+                            <td className={`text-right py-2 px-2 font-mono ${holding.todayChangePct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              {holding.todayChangePct >= 0 ? '+' : ''}{holding.todayChangePct.toFixed(2)}%
+                              <div className="text-[10px] opacity-70">{holding.todayDeltaUsd >= 0 ? '+' : '-'}USD {formatUsd(Math.abs(holding.todayDeltaUsd))}</div>
+                            </td>
                             <td className="text-right py-2 px-2 font-mono">{`NT$${formatTwd(holding.valueTwd)}`}</td>
                             <td className={`text-right py-2 px-2 font-mono ${holding.pnlTwd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                               {holding.pnlTwd >= 0 ? '+' : '-'}{`NT$${formatTwd(Math.abs(holding.pnlTwd))}`}

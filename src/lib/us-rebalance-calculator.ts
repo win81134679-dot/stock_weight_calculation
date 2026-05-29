@@ -55,6 +55,10 @@ export interface UsHoldingSummaryRow {
   pnlPct: number
   currentWeight: number
   targetWeight: number
+  /** 今日漲跌 %（現價 vs 昨收） */
+  todayChangePct: number
+  /** 今日該檔持倉資產變化 USD（(現價-昨收) × 股數） */
+  todayDeltaUsd: number
 }
 
 export interface UsAccountSummary {
@@ -90,6 +94,9 @@ export function calcUsAccountSummary(
     const costUsd = roundUsd(holding.shares * holding.avgCostUsd)
     const costTwd = roundTwd(price ? holding.shares * holding.avgCostUsd * (price.priceTwd / Math.max(price.priceUsd, 0.0001)) : 0)
     const targetWeight = targetWeights.find((target) => target.symbol === holding.symbol)?.weight ?? 0
+    const prevCloseUsd = price?.prevCloseUsd ?? 0
+    const todayChangePct = prevCloseUsd > 0 ? ((priceUsd - prevCloseUsd) / prevCloseUsd) * 100 : 0
+    const todayDeltaUsd = prevCloseUsd > 0 ? roundUsd((priceUsd - prevCloseUsd) * holding.shares) : 0
     return {
       symbol: holding.symbol,
       name: holding.name,
@@ -105,6 +112,8 @@ export function calcUsAccountSummary(
       pnlPct: costUsd > 0 ? ((valueUsd - costUsd) / costUsd) * 100 : 0,
       currentWeight: 0,
       targetWeight,
+      todayChangePct,
+      todayDeltaUsd,
     }
   })
 

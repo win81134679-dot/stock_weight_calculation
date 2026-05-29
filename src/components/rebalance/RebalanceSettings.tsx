@@ -8,6 +8,7 @@
 import React, { useState } from 'react'
 import { RebalanceSettings } from '@/lib/types'
 import { sendTestNotification } from '@/lib/discord-webhook'
+import { uploadCombinedSync, downloadCombinedSync } from '@/lib/combined-sync'
 
 interface Props {
   settings: RebalanceSettings
@@ -76,24 +77,14 @@ export default function RebalanceSettingsPanel({
     }
     setSyncStatus('uploading')
     setSyncMessage(null)
-    try {
-      const data = onExportJSON()
-      const res = await fetch('/api/kv-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'upload', passphrase: syncPassphrase.trim(), data }),
-      })
-      const json = await res.json()
-      if (res.ok) {
-        setSyncStatus('ok')
-        setSyncMessage('✅ 上傳成功！在其他裝置輸入相同密碼即可下載')
-      } else {
-        setSyncStatus('fail')
-        setSyncMessage(`❌ ${json.error ?? '上傳失敗'}`)
-      }
-    } catch {
+    // 合併同步：台股 + 美股一起上傳
+    const result = await uploadCombinedSync(syncPassphrase.trim())
+    if (result.ok) {
+      setSyncStatus('ok')
+      setSyncMessage('✅ 上傳成功（含台股+美股）！在其他裝置輸入相同密碼即可下載')
+    } else {
       setSyncStatus('fail')
-      setSyncMessage('❌ 網路錯誤，請稍後重試')
+      setSyncMessage(`❌ ${result.error ?? '上傳失敗'}`)
     }
     setTimeout(() => { setSyncStatus('idle'); setSyncMessage(null) }, 6000)
   }
@@ -106,30 +97,19 @@ export default function RebalanceSettingsPanel({
     }
     setSyncStatus('downloading')
     setSyncMessage(null)
-    try {
-      const res = await fetch('/api/kv-sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'download', passphrase: syncPassphrase.trim() }),
-      })
-      const json = await res.json()
-      if (res.ok && json.data) {
-        const ok = onImportJSON(json.data)
-        if (ok) {
-          setSyncStatus('ok')
-          setSyncMessage('✅ 下載同步成功！資料已更新')
-        } else {
-          setSyncStatus('fail')
-          setSyncMessage('❌ 資料格式錯誤，可能是密碼錯誤或資料損壞')
-        }
-      } else {
-        setSyncStatus('fail')
-        setSyncMessage(`❌ ${json.error ?? '下載失敗'}`)
-      }
-    } catch {
-      setSyncStatus('fail')
-      setSyncMessage('❌ 網路錯誤，請稍後重試')
+    // 合併同步：下載後直接寫回 localStorage（台股 + 美股），需重新整理生效
+    const result = await downloadCombinedSync(syncPassphrase.trim())
+    if (result.ok) {
+      setSyncStatus('ok')
+      const parts: string[] = []
+      if (result.applied?.twOk) parts.push('台股')
+      if (result.applied?.usOk) parts.push('美股')
+      setSyncMessage(`✅ 下載同步成功（${parts.join(' + ') || '資料'}）！3 秒後自動重新整理`)
+      setTimeout(() => { if (typeof window !== 'undefined') window.location.reload() }, 3000)
+      return
     }
+    setSyncStatus('fail')
+    setSyncMessage(`❌ ${result.error ?? '下載失敗'}`)
     setTimeout(() => { setSyncStatus('idle'); setSyncMessage(null) }, 6000)
   }
 

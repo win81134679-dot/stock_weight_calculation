@@ -12,7 +12,7 @@ import { sendUsTestNotification } from '@/lib/us-discord-webhook'
 import { uploadCombinedSync, downloadCombinedSync } from '@/lib/combined-sync'
 
 /** 同步 UI 是否對外開放。功能完成驗收後改為 true 即上線。 */
-const SYNC_UI_ENABLED = false
+const SYNC_UI_ENABLED = true
 
 interface Props {
   settings: UsSettings
@@ -96,10 +96,12 @@ export default function UsRebalanceSettings({
       const parts: string[] = []
       if (result.applied?.twOk) parts.push('台股')
       if (result.applied?.usOk) parts.push('美股')
-      setSyncMessage(`✅ 下載同步成功（${parts.join(' + ') || '資料'}）！重新整理後生效`)
-    } else {
-      setSyncMessage(`❌ ${result.error}`)
+      setSyncMessage(`✅ 下載同步成功（${parts.join(' + ') || '資料'}）！3 秒後自動重新整理`)
+      setSyncStatus('idle')
+      setTimeout(() => { if (typeof window !== 'undefined') window.location.reload() }, 3000)
+      return
     }
+    setSyncMessage(`❌ ${result.error}`)
     setSyncStatus('idle')
     setTimeout(() => setSyncMessage(null), 6000)
   }
