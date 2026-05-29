@@ -2,11 +2,43 @@ import {
   UsCustomFeeSettings,
   UsFeeProfileId,
   UsPortfolioResult,
+  UsRegulatoryFees,
   UsStockEntry,
   UsStockResult,
   UsTopUpResult,
   UsTopUpStockResult,
 } from './us-types'
+
+/**
+ * 美股法定規費預設值（台灣複委託賣出時實際會收，金額極小）
+ * - SEC 規費：2024-05 起約成交金額 × 0.0000278（每百萬美元 $27.80）
+ * - FINRA TAF：每股 $0.000166，單筆上限 $8.30
+ * 預設啟用（符合台灣複委託），可於設定關閉。
+ */
+export const DEFAULT_US_REGULATORY_FEES: UsRegulatoryFees = {
+  enabled: true,
+  secFeeRate: 0.0000278,
+  finraTafPerShare: 0.000166,
+  finraTafMaxUsd: 8.3,
+}
+
+/** 美股對外國人股利預扣稅率預設值（30%） */
+export const DEFAULT_US_DIVIDEND_WITHHOLDING_RATE = 0.3
+
+/**
+ * 計算賣出時的美股法定規費（SEC + FINRA TAF）。
+ * 僅賣出收取；enabled 為 false 時回 0。
+ */
+export function calcUsRegulatorySellFee(
+  amountUsd: number,
+  shares: number,
+  reg: UsRegulatoryFees,
+): number {
+  if (!reg.enabled || amountUsd <= 0 || shares <= 0) return 0
+  const sec = amountUsd * reg.secFeeRate
+  const taf = Math.min(shares * reg.finraTafPerShare, reg.finraTafMaxUsd)
+  return roundUsd(sec + taf)
+}
 
 const PROFILE_PRESETS: Record<Exclude<UsFeeProfileId, 'custom'>, UsCustomFeeSettings> = {
   standard: {

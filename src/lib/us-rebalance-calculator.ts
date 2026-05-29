@@ -1,18 +1,28 @@
 import {
+  UsAccountPnL,
   UsAllocationConfig,
+  UsCombinedPnL,
   UsCustomFeeSettings,
   UsDeviationInvestResult,
   UsDeviationInvestSummary,
+  UsDividendRecord,
   UsFeeProfileId,
   UsHolding,
+  UsHoldingPnLRow,
   UsPortfolioStore,
   UsPriceCache,
   UsRebalanceAction,
   UsRebalancePlan,
+  UsRegulatoryFees,
   UsTargetWeight,
   UsTransaction,
 } from './us-types'
-import { calcUsFee, resolveUsFeeSettings } from './us-calculator'
+import {
+  calcUsFee,
+  calcUsRegulatorySellFee,
+  DEFAULT_US_REGULATORY_FEES,
+  resolveUsFeeSettings,
+} from './us-calculator'
 
 function roundUsd(value: number): number {
   return Math.round(value * 100) / 100
@@ -255,6 +265,7 @@ export function calcUsQuarterlyRebalance(
   fxRate: number,
   profileId: UsFeeProfileId,
   customFees: UsCustomFeeSettings,
+  regulatoryFees: UsRegulatoryFees = DEFAULT_US_REGULATORY_FEES,
 ): UsRebalancePlan {
   const feeSettings = resolveUsFeeSettings(profileId, customFees)
   const accountHoldings = holdings.filter((holding) => holding.accountId === accountId)
@@ -344,7 +355,9 @@ export function calcUsQuarterlyRebalance(
 
     const sellShares = Math.abs(diffShares)
     const estimatedAmountUsd = roundUsd(sellShares * priceUsd)
-    const feeUsd = calcUsFee(estimatedAmountUsd, feeSettings.sellRate, feeSettings.sellMinUsd)
+    const brokerFeeUsd = calcUsFee(estimatedAmountUsd, feeSettings.sellRate, feeSettings.sellMinUsd)
+    const regFeeUsd = calcUsRegulatorySellFee(estimatedAmountUsd, sellShares, regulatoryFees)
+    const feeUsd = roundUsd(brokerFeeUsd + regFeeUsd)
     const estimatedAmountTwd = roundTwd(estimatedAmountUsd * fxRate)
     return {
       symbol: target.symbol,
@@ -419,4 +432,100 @@ export function findEarliestBuyDate(
     .map((tx) => tx.date)
     .sort()
   return dates[0] ?? new Date().toISOString().split('T')[0]
+}
+
+// ============================================================
+// 損益計算（對齊台股 calcAccountPnL / calcCombinedPnL）
+// 採 USD 為主，TWD 以當前匯率換算；含稅後已領股利。
+// ============================================================
+
+export function calcUsAccountPnL(
+  accountId: string,
+  accountName: string,
+  holdings: UsHolding[],
+  prices: Record<string, UsPriceCache>,
+  targetWeights: UsTargetWeight[],
+  fxRate: number,
+  dividends: UsDividendRecord[] = [],
+): UsAccountPnL {
+  const summary = calcUsAccountSummary(accountId, accountName, holdings, prices, targetWeights)
+
+  const rows: UsHoldingPnLRow[] = summary.holdings.map((row) => {
+    const targetWeight = targetWeights.find((target) => target.symbol === row.symbol)?.weight ?? 0
+    return {
+      symbol: row.symbol,
+      name: row.name,
+      shares: row.shares,
+      avgCostUsd: row.avgCostUsd,
+      priceUsd: row.priceUsd,
+      valueUsd: row.valueUsd,
+      valueTwd: row.valueTwd,
+      costUsd: row.costUsd,
+      costTwd: row.costTwd,
+      pnlUsd: row.pnlUsd,
+      pnlTwd: row.pnlTwd,
+      pnlPct: row.pnlPct,
+      currentWeight: row.currentWeight,
+      targetWeight,
+      deviation: row.currentWeight - targetWeight,
+    }
+  })
+
+  const dividendsNetUsd = roundUsd(
+    dividends
+      .filter((dividend) => dividend.accountId === accountId)
+      .reduce((sum, dividend) => sum + (dividend.netCashUsd ?? 0), 0),
+  )
+
+  return {
+    accountId,
+    totalCostUsd: summary.totalCostUsd,
+    totalValueUsd: summary.totalValueUsd,
+    totalCostTwd: summary.totalCostTwd,
+    totalValueTwd: summary.totalValueTwd,
+    totalPnlUsd: summary.totalPnlUsd,
+    totalPnlTwd: summary.totalPnlTwd,
+    pnlPct: summary.totalPnlPct,
+    dividendsNetUsd,
+    holdings: rows,
+  }
+}
+
+export function calcUsCombinedPnL(
+  store: UsPortfolioStore,
+  prices: Record<string, UsPriceCache>,
+  fxRate: number,
+): UsCombinedPnL {
+  const byAccount = store.accounts.map((account) => {
+    const config = resolveUsAccountConfig(account.id, store.allocationConfigs, store.accounts)
+    return calcUsAccountPnL(
+      account.id,
+      account.name,
+      store.holdings,
+      prices,
+      config.targetWeights,
+      fxRate,
+      store.dividends,
+    )
+  })
+
+  const totalCostUsd = roundUsd(byAccount.reduce((sum, account) => sum + account.totalCostUsd, 0))
+  const totalValueUsd = roundUsd(byAccount.reduce((sum, account) => sum + account.totalValueUsd, 0))
+  const totalCostTwd = roundTwd(byAccount.reduce((sum, account) => sum + account.totalCostTwd, 0))
+  const totalValueTwd = roundTwd(byAccount.reduce((sum, account) => sum + account.totalValueTwd, 0))
+  const totalPnlUsd = roundUsd(totalValueUsd - totalCostUsd)
+  const totalPnlTwd = roundTwd(totalValueTwd - totalCostTwd)
+  const dividendsNetUsd = roundUsd(byAccount.reduce((sum, account) => sum + account.dividendsNetUsd, 0))
+
+  return {
+    totalCostUsd,
+    totalValueUsd,
+    totalCostTwd,
+    totalValueTwd,
+    totalPnlUsd,
+    totalPnlTwd,
+    pnlPct: totalCostUsd > 0 ? (totalPnlUsd / totalCostUsd) * 100 : 0,
+    dividendsNetUsd,
+    byAccount,
+  }
 }

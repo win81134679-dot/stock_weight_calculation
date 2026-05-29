@@ -4,12 +4,17 @@ import {
   UsCustomFeeSettings,
   UsDividendRecord,
   UsHolding,
+  UsPnLSnapshot,
   UsPortfolioStore,
   UsSettings,
   UsTargetWeight,
   UsTransaction,
 } from './us-types'
 import { calcUsNextRebalanceDate } from './us-rebalance-calculator'
+import {
+  DEFAULT_US_DIVIDEND_WITHHOLDING_RATE,
+  DEFAULT_US_REGULATORY_FEES,
+} from './us-calculator'
 
 const STORAGE_KEY = 'us-portfolio-store-v1'
 
@@ -39,6 +44,10 @@ const DEFAULT_SETTINGS: UsSettings = {
   profileId: 'standard',
   customFees: DEFAULT_CUSTOM_FEES,
   lastFxRate: 32,
+  dividendWithholdingRate: DEFAULT_US_DIVIDEND_WITHHOLDING_RATE,
+  regulatoryFees: { ...DEFAULT_US_REGULATORY_FEES },
+  discordWebhookUrl: '',
+  discordNotifyDaysBefore: 7,
 }
 
 function buildDefaultStore(): UsPortfolioStore {
@@ -49,7 +58,8 @@ function buildDefaultStore(): UsPortfolioStore {
     dividends: [],
     dividendEntryDates: {},
     allocationConfigs: [{ ...DEFAULT_CONFIG, nextRebalanceDate: calcUsNextRebalanceDate(3, 1) }],
-    settings: DEFAULT_SETTINGS,
+    snapshots: [],
+    settings: { ...DEFAULT_SETTINGS, regulatoryFees: { ...DEFAULT_US_REGULATORY_FEES } },
     lastUpdated: new Date().toISOString(),
   }
 }
@@ -57,16 +67,32 @@ function buildDefaultStore(): UsPortfolioStore {
 function migrateStore(parsed: Record<string, unknown>): UsPortfolioStore {
   const base = buildDefaultStore()
   const input = parsed as Partial<UsPortfolioStore>
+  const withholdingRate = input.settings?.dividendWithholdingRate ?? DEFAULT_SETTINGS.dividendWithholdingRate
+
+  // 舊版股利紀錄補上稅率與稅後欄位
+  const dividends: UsDividendRecord[] = Array.isArray(input.dividends)
+    ? input.dividends.map((record) => {
+        const rate = record.withholdingRate ?? withholdingRate
+        const totalCashUsd = record.totalCashUsd ?? 0
+        return {
+          ...record,
+          withholdingRate: rate,
+          netCashUsd: record.netCashUsd ?? Math.round(totalCashUsd * (1 - rate) * 100) / 100,
+        }
+      })
+    : []
+
   return {
     ...base,
     accounts: Array.isArray(input.accounts) ? input.accounts : [],
     holdings: Array.isArray(input.holdings) ? input.holdings : [],
     transactions: Array.isArray(input.transactions) ? input.transactions : [],
-    dividends: Array.isArray(input.dividends) ? input.dividends : [],
+    dividends,
     dividendEntryDates: input.dividendEntryDates ?? {},
     allocationConfigs: Array.isArray(input.allocationConfigs) && input.allocationConfigs.length > 0
       ? input.allocationConfigs
       : base.allocationConfigs,
+    snapshots: Array.isArray(input.snapshots) ? input.snapshots : [],
     settings: {
       profileId: input.settings?.profileId ?? DEFAULT_SETTINGS.profileId,
       customFees: {
@@ -76,6 +102,15 @@ function migrateStore(parsed: Record<string, unknown>): UsPortfolioStore {
         sellMinUsd: input.settings?.customFees?.sellMinUsd ?? DEFAULT_CUSTOM_FEES.sellMinUsd,
       },
       lastFxRate: input.settings?.lastFxRate ?? DEFAULT_SETTINGS.lastFxRate,
+      dividendWithholdingRate: withholdingRate,
+      regulatoryFees: {
+        enabled: input.settings?.regulatoryFees?.enabled ?? DEFAULT_US_REGULATORY_FEES.enabled,
+        secFeeRate: input.settings?.regulatoryFees?.secFeeRate ?? DEFAULT_US_REGULATORY_FEES.secFeeRate,
+        finraTafPerShare: input.settings?.regulatoryFees?.finraTafPerShare ?? DEFAULT_US_REGULATORY_FEES.finraTafPerShare,
+        finraTafMaxUsd: input.settings?.regulatoryFees?.finraTafMaxUsd ?? DEFAULT_US_REGULATORY_FEES.finraTafMaxUsd,
+      },
+      discordWebhookUrl: input.settings?.discordWebhookUrl ?? '',
+      discordNotifyDaysBefore: input.settings?.discordNotifyDaysBefore ?? DEFAULT_SETTINGS.discordNotifyDaysBefore,
     },
     lastUpdated: input.lastUpdated ?? new Date().toISOString(),
   }
@@ -223,6 +258,10 @@ export function updateUsSettings(store: UsPortfolioStore, patch: Partial<UsSetti
         ...store.settings.customFees,
         ...(patch.customFees ?? {}),
       },
+      regulatoryFees: {
+        ...store.settings.regulatoryFees,
+        ...(patch.regulatoryFees ?? {}),
+      },
     },
   }
 }
@@ -276,14 +315,28 @@ export function setUsAccountAllocationConfig(store: UsPortfolioStore, accountId:
   }
 }
 
+function withDividendTax(
+  record: Omit<UsDividendRecord, 'id'>,
+  fallbackRate: number,
+): Omit<UsDividendRecord, 'id'> {
+  const rate = record.withholdingRate ?? fallbackRate
+  const totalCashUsd = record.totalCashUsd ?? 0
+  return {
+    ...record,
+    withholdingRate: rate,
+    netCashUsd: record.netCashUsd ?? Math.round(totalCashUsd * (1 - rate) * 100) / 100,
+  }
+}
+
 export function addUsDividend(store: UsPortfolioStore, record: Omit<UsDividendRecord, 'id'>): UsPortfolioStore {
   const exists = store.dividends.some((item) =>
     item.accountId === record.accountId && item.symbol === record.symbol && item.exDate === record.exDate,
   )
   if (exists) return store
+  const normalized = withDividendTax(record, store.settings.dividendWithholdingRate)
   return {
     ...store,
-    dividends: [...store.dividends, { ...record, id: makeId('us_div') }],
+    dividends: [...store.dividends, { ...normalized, id: makeId('us_div') }],
   }
 }
 
@@ -315,5 +368,23 @@ export function importUsStoreFromJSON(json: string): UsPortfolioStore | null {
     return migrateStore(JSON.parse(json) as Record<string, unknown>)
   } catch {
     return null
+  }
+}
+
+// ============================================================
+// 每日快照（snapshot）— 對齊台股，每日去重、最多保留 365 筆
+// ============================================================
+
+export function addUsSnapshot(store: UsPortfolioStore, snapshot: UsPnLSnapshot): UsPortfolioStore {
+  const dateKey = snapshot.date.split('T')[0]
+  const filtered = store.snapshots.filter((item) => item.date.split('T')[0] !== dateKey)
+  const snapshots = [...filtered, snapshot].slice(-365)
+  return { ...store, snapshots }
+}
+
+export function deleteUsSnapshot(store: UsPortfolioStore, dateKey: string): UsPortfolioStore {
+  return {
+    ...store,
+    snapshots: store.snapshots.filter((item) => !item.date.startsWith(dateKey)),
   }
 }

@@ -5,12 +5,14 @@ import {
   addUsAccount,
   addUsAllocationConfig,
   addUsDividend,
+  addUsSnapshot,
   addUsTransaction,
   bulkUpsertUsDividends,
   deleteUsAccount,
   deleteUsAllocationConfig,
   deleteUsDividend,
   deleteUsHolding,
+  deleteUsSnapshot,
   deleteUsTransaction,
   duplicateUsAllocationConfig,
   exportUsStoreAsJSON,
@@ -29,6 +31,7 @@ import {
   UsAllocationConfig,
   UsDividendRecord,
   UsHolding,
+  UsPnLSnapshot,
   UsPortfolioStore,
   UsSettings,
   UsTransaction,
@@ -123,6 +126,14 @@ export function useUsPortfolioStore() {
     setStore((prev) => setUsDividendEntryDate(prev, accountId, symbol, date))
   }, [])
 
+  const addSnapshot = useCallback((snapshot: UsPnLSnapshot) => {
+    setStore((prev) => addUsSnapshot(prev, snapshot))
+  }, [])
+
+  const removeSnapshot = useCallback((dateKey: string) => {
+    setStore((prev) => deleteUsSnapshot(prev, dateKey))
+  }, [])
+
   const exportJSON = useCallback(() => exportUsStoreAsJSON(store), [store])
 
   const importJSON = useCallback((json: string): boolean => {
@@ -152,6 +163,8 @@ export function useUsPortfolioStore() {
     deleteDividend: removeDividend,
     bulkUpsertDividends,
     setDividendEntryDate,
+    addSnapshot,
+    deleteSnapshot: removeSnapshot,
     exportJSON,
     importJSON,
   }

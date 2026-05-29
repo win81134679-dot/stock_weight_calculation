@@ -6,13 +6,22 @@ import { useUsCurrentPrices } from '@/hooks/useUsCurrentPrices'
 import { formatTwd, formatUsd } from '@/lib/us-calculator'
 import {
   calcUsAccountSummary,
+  calcUsCombinedPnL,
   calcUsDeviationInvestment,
   calcUsNextRebalanceDate,
   calcUsQuarterlyRebalance,
   findEarliestBuyDate,
   resolveUsAccountConfig,
 } from '@/lib/us-rebalance-calculator'
-import { UsCustomFeeSettings, UsFeeProfileId, UsHolding } from '@/lib/us-types'
+import { takeAndSaveUsSnapshot } from '@/lib/us-snapshot'
+import { checkAndNotifyUsOnLoad } from '@/lib/us-discord-webhook'
+import { UsHolding } from '@/lib/us-types'
+import UsRadialWeightChart from './UsRadialWeightChart'
+import UsTreemapChart from './UsTreemapChart'
+import UsPnLHistoryChart from './UsPnLHistoryChart'
+import UsDrawdownChart from './UsDrawdownChart'
+import UsIndexCard from './UsIndexCard'
+import UsRebalanceSettings from './UsRebalanceSettings'
 
 type SubTab = 'overview' | 'holdings' | 'invest' | 'rebalance' | 'settings'
 
@@ -58,7 +67,6 @@ export default function UsRebalanceTab() {
   const [manualDividendSymbol, setManualDividendSymbol] = useState('')
   const [manualDividendDate, setManualDividendDate] = useState(new Date().toISOString().split('T')[0])
   const [manualDividendCash, setManualDividendCash] = useState('')
-  const [importExportJson, setImportExportJson] = useState('')
 
   const {
     store,
@@ -79,6 +87,8 @@ export default function UsRebalanceTab() {
     deleteDividend,
     bulkUpsertDividends,
     setDividendEntryDate,
+    addSnapshot,
+    deleteSnapshot,
     updateSettings,
     exportJSON,
     importJSON,
@@ -236,8 +246,65 @@ export default function UsRebalanceTab() {
       fxRate,
       store.settings.profileId,
       store.settings.customFees,
+      store.settings.regulatoryFees,
     )
-  }, [fxRate, prices, resolvedConfig, selectedAccount, store.holdings, store.settings.customFees, store.settings.profileId])
+  }, [fxRate, prices, resolvedConfig, selectedAccount, store.holdings, store.settings.customFees, store.settings.profileId, store.settings.regulatoryFees])
+
+  // 跨帳戶合併損益（含稅後股利）
+  const combinedPnl = useMemo(() => {
+    if (!(fxRate > 0)) return null
+    return calcUsCombinedPnL(store, prices, fxRate)
+  }, [store, prices, fxRate])
+
+  // 總覽：目標權重圓餅資料
+  const weightChartData = useMemo(() => {
+    if (!resolvedConfig) return []
+    return resolvedConfig.targetWeights.map((target) => ({
+      name: target.symbol,
+      value: target.weight,
+      symbol: target.symbol,
+    }))
+  }, [resolvedConfig])
+
+  // 總覽：持倉市值樹狀圖資料（跨帳戶合併，TWD）
+  const treemapData = useMemo(() => {
+    return combinedHoldings.map((holding) => ({
+      name: holding.symbol,
+      size: Math.round(holding.valueTwd),
+      symbol: holding.symbol,
+    }))
+  }, [combinedHoldings])
+
+  // 在總覽分頁、有帳戶與報價時自動存每日快照
+  useEffect(() => {
+    if (activeTab !== 'overview') return
+    if (store.accounts.length === 0 || !(fxRate > 0) || Object.keys(prices).length === 0) return
+    const updated = takeAndSaveUsSnapshot(store, prices, fxRate)
+    const todayKey = new Date().toISOString().split('T')[0]
+    const updatedToday = updated.snapshots.find((s) => s.date.startsWith(todayKey))
+    const storeToday = store.snapshots.find((s) => s.date.startsWith(todayKey))
+    const changed =
+      updated.snapshots.length !== store.snapshots.length ||
+      updatedToday?.combinedPnlUsd !== storeToday?.combinedPnlUsd
+    if (changed && updatedToday) {
+      addSnapshot(updatedToday)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, Object.keys(prices).join(','), fxRate, store.holdings.map((h) => `${h.symbol}:${h.shares}`).join(',')])
+
+  // 載入時 Discord 通知（依損益/偏差/再平衡日，僅一次）
+  useEffect(() => {
+    if (!store.settings.discordWebhookUrl || store.accounts.length === 0 || !(fxRate > 0)) return
+    const config = store.allocationConfigs[0]
+    if (!config) return
+    const combined = calcUsCombinedPnL(store, prices, fxRate)
+    const deviations = config.targetWeights.map((target) => {
+      const row = combined.byAccount.flatMap((account) => account.holdings).find((holding) => holding.symbol === target.symbol)
+      return { name: target.symbol, deviation: (row?.currentWeight ?? 0) - target.weight }
+    })
+    void checkAndNotifyUsOnLoad(store.settings, combined.pnlPct, combined.totalPnlTwd, deviations, config.nextRebalanceDate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const saveConfigDetails = useCallback(() => {
     if (!selectedConfig) return
@@ -337,21 +404,27 @@ export default function UsRebalanceTab() {
     const res = await fetch(`/api/us-dividend?symbol=${encodeURIComponent(symbol)}`)
     const data = await res.json() as { records?: Array<{ exDate: string; cashPerShareUsd: number }> }
     const entryDate = store.dividendEntryDates[`${accountId}_${symbol}`] ?? findEarliestBuyDate(accountId, symbol, store.transactions)
+    const rate = store.settings.dividendWithholdingRate
     const records = (data.records ?? [])
       .filter((record) => record.exDate >= entryDate)
-      .map((record) => ({
-        accountId,
-        symbol,
-        exDate: record.exDate,
-        cashPerShareUsd: record.cashPerShareUsd,
-        shares: holding.shares,
-        totalCashUsd: holding.shares * record.cashPerShareUsd,
-        source: 'auto' as const,
-      }))
+      .map((record) => {
+        const totalCashUsd = holding.shares * record.cashPerShareUsd
+        return {
+          accountId,
+          symbol,
+          exDate: record.exDate,
+          cashPerShareUsd: record.cashPerShareUsd,
+          shares: holding.shares,
+          totalCashUsd,
+          withholdingRate: rate,
+          netCashUsd: Math.round(totalCashUsd * (1 - rate) * 100) / 100,
+          source: 'auto' as const,
+        }
+      })
     if (records.length > 0) {
       bulkUpsertDividends(records)
     }
-  }, [bulkUpsertDividends, store.dividendEntryDates, store.holdings, store.transactions])
+  }, [bulkUpsertDividends, store.dividendEntryDates, store.holdings, store.settings.dividendWithholdingRate, store.transactions])
 
   const handleManualDividendAdd = useCallback(() => {
     if (!selectedAccountId) return
@@ -359,18 +432,22 @@ export default function UsRebalanceTab() {
     const cashPerShareUsd = parseFloat(manualDividendCash)
     const holding = store.holdings.find((item) => item.accountId === selectedAccountId && item.symbol === symbol)
     if (!symbol || !(cashPerShareUsd > 0) || !holding) return
+    const rate = store.settings.dividendWithholdingRate
+    const totalCashUsd = holding.shares * cashPerShareUsd
     addDividend({
       accountId: selectedAccountId,
       symbol,
       exDate: manualDividendDate,
       cashPerShareUsd,
       shares: holding.shares,
-      totalCashUsd: holding.shares * cashPerShareUsd,
+      totalCashUsd,
+      withholdingRate: rate,
+      netCashUsd: Math.round(totalCashUsd * (1 - rate) * 100) / 100,
       source: 'manual',
     })
     setManualDividendSymbol('')
     setManualDividendCash('')
-  }, [addDividend, manualDividendCash, manualDividendDate, manualDividendSymbol, selectedAccountId, store.holdings])
+  }, [addDividend, manualDividendCash, manualDividendDate, manualDividendSymbol, selectedAccountId, store.holdings, store.settings.dividendWithholdingRate])
 
   const handleCreateAccount = useCallback(() => {
     const name = newAccountName.trim()
@@ -471,7 +548,32 @@ export default function UsRebalanceTab() {
                 <MetricCard label="持倉標的" value={combinedSummary.holdingsCount.toString()} />
                 <MetricCard label="總市值" value={`NT$${formatTwd(combinedSummary.totalValueTwd)}`} />
                 <MetricCard label="總損益" value={`${combinedSummary.totalPnlTwd >= 0 ? '+' : '-'}NT$${formatTwd(Math.abs(combinedSummary.totalPnlTwd))}`} />
-                <MetricCard label="已領股利" value={`USD ${formatUsd(combinedSummary.totalDividendsUsd)}`} />
+                <MetricCard label="已領股利(稅後)" value={`USD ${formatUsd(combinedPnl?.dividendsNetUsd ?? 0)}`} />
+              </div>
+
+              <UsIndexCard />
+
+              {/* 視覺化圖表 */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">目標權重分佈</div>
+                  <UsRadialWeightChart data={weightChartData} />
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">持倉市值分佈（TWD）</div>
+                  <UsTreemapChart data={treemapData} unitPrefix="NT$" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">歷史損益</div>
+                  <UsPnLHistoryChart snapshots={store.snapshots} onDeleteSnapshot={deleteSnapshot} />
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">回撤水位（USD）</div>
+                  <UsDrawdownChart snapshots={store.snapshots} />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-4">
@@ -591,9 +693,9 @@ export default function UsRebalanceTab() {
                             <td className="py-2 px-2 text-xs text-slate-500">{Array.from(holding.accounts).join('、')}</td>
                             <td className="text-right py-2 px-2">{holding.shares.toLocaleString()}</td>
                             <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.priceUsd)}</td>
-                            <td className="text-right py-2 px-2 font-mono">NT$${formatTwd(holding.valueTwd)}</td>
+                            <td className="text-right py-2 px-2 font-mono">{`NT$${formatTwd(holding.valueTwd)}`}</td>
                             <td className={`text-right py-2 px-2 font-mono ${holding.pnlTwd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                              {holding.pnlTwd >= 0 ? '+' : '-'}NT$${formatTwd(Math.abs(holding.pnlTwd))}
+                              {holding.pnlTwd >= 0 ? '+' : '-'}{`NT$${formatTwd(Math.abs(holding.pnlTwd))}`}
                             </td>
                           </tr>
                         ))}
@@ -623,7 +725,7 @@ export default function UsRebalanceTab() {
 
                 <DataCard title="最近股利">
                   <Table
-                    headers={['除息日', '帳戶', 'Ticker', '每股 USD', '總額 USD']}
+                    headers={['除息日', '帳戶', 'Ticker', '每股 USD', '稅後 USD']}
                     rows={recentDividends.map((dividend) => ({
                       key: dividend.id,
                       cells: [
@@ -631,7 +733,7 @@ export default function UsRebalanceTab() {
                         store.accounts.find((account) => account.id === dividend.accountId)?.name ?? dividend.accountId,
                         dividend.symbol,
                         formatUsd(dividend.cashPerShareUsd),
-                        formatUsd(dividend.totalCashUsd),
+                        formatUsd(dividend.netCashUsd),
                       ],
                     }))}
                   />
@@ -677,9 +779,9 @@ export default function UsRebalanceTab() {
                             <td className="text-right py-2 px-2">{holding.shares.toLocaleString()}</td>
                             <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.avgCostUsd)}</td>
                             <td className="text-right py-2 px-2 font-mono">USD {formatUsd(holding.priceUsd)}</td>
-                            <td className="text-right py-2 px-2 font-mono">NT$${formatTwd(holding.valueTwd)}</td>
+                            <td className="text-right py-2 px-2 font-mono">{`NT$${formatTwd(holding.valueTwd)}`}</td>
                             <td className={`text-right py-2 px-2 font-mono ${holding.pnlTwd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                              {holding.pnlTwd >= 0 ? '+' : '-'}NT$${formatTwd(Math.abs(holding.pnlTwd))}
+                              {holding.pnlTwd >= 0 ? '+' : '-'}{`NT$${formatTwd(Math.abs(holding.pnlTwd))}`}
                             </td>
                           </tr>
                         ))}
@@ -943,13 +1045,14 @@ export default function UsRebalanceTab() {
                   <input value={manualDividendCash} onChange={(e) => setManualDividendCash(e.target.value)} placeholder="每股 USD" className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                 </div>
                 <button onClick={handleManualDividendAdd} className="rounded-xl bg-slate-700 text-white text-sm font-semibold px-4 py-2.5">新增股利</button>
+                <p className="text-[11px] text-slate-400">稅後實領將依目前設定的預扣稅率（{Math.round(store.settings.dividendWithholdingRate * 100)}%）自動換算。</p>
               </div>
             </div>
 
             <div className="mt-4">
               <DataCard title="股利紀錄">
                 <Table
-                  headers={['帳戶', 'Ticker', '除息日', '每股 USD', '總額 USD', '']}
+                  headers={['帳戶', 'Ticker', '除息日', '每股 USD', '稅前 USD', '稅後 USD', '']}
                   rows={store.dividends
                     .slice()
                     .sort((a, b) => b.exDate.localeCompare(a.exDate))
@@ -961,6 +1064,7 @@ export default function UsRebalanceTab() {
                         dividend.exDate,
                         formatUsd(dividend.cashPerShareUsd),
                         formatUsd(dividend.totalCashUsd),
+                        formatUsd(dividend.netCashUsd),
                         <button key="delete" onClick={() => deleteDividend(dividend.id)} className="text-red-500">刪除</button>,
                       ],
                     }))}
@@ -985,14 +1089,18 @@ export default function UsRebalanceTab() {
           </div>
           {deviationSummary ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                 <MetricCard label="投入 TWD" value={`NT$${formatTwd(deviationSummary.investAmountTwd)}`} />
                 <MetricCard label="投入 USD" value={`USD ${formatUsd(deviationSummary.investAmountUsd)}`} />
                 <MetricCard label="實際分配" value={`NT$${formatTwd(deviationSummary.totalAllocatedTwd)}`} />
+                <MetricCard
+                  label="總手續費"
+                  value={`NT$${formatTwd(deviationSummary.results.reduce((sum, result) => sum + result.buyFeeTwd, 0))}`}
+                />
                 <MetricCard label="剩餘現金" value={`NT$${formatTwd(deviationSummary.remainingCashTwd)}`} />
               </div>
               <Table
-                headers={['股票', '目前比重', '目標比重', '建議投入', '可買股數', '新比重']}
+                headers={['股票', '目前比重', '目標比重', '建議投入', '可買股數', '手續費', '實際成本', '新比重']}
                 rows={deviationSummary.results.map((result) => ({
                   key: result.symbol,
                   cells: [
@@ -1001,10 +1109,15 @@ export default function UsRebalanceTab() {
                     `${result.targetWeight.toFixed(2)}%`,
                     `NT$${formatTwd(result.suggestedAmountTwd)} / USD ${formatUsd(result.suggestedAmountUsd)}`,
                     result.displayShares,
+                    `NT$${formatTwd(result.buyFeeTwd)} / USD ${formatUsd(result.buyFeeUsd)}`,
+                    `NT$${formatTwd(result.actualCostTwd)} / USD ${formatUsd(result.actualCostUsd)}`,
                     `${result.newWeight.toFixed(2)}%`,
                   ],
                 }))}
               />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                已依目前費率模板計入買入手續費；「建議投入」是理想分配金額，「實際成本」則是扣除整股限制後，包含手續費的實際下單成本。
+              </div>
             </div>
           ) : (
             <EmptyState text="請先建立帳戶、配置與報價資料" />
@@ -1044,6 +1157,9 @@ export default function UsRebalanceTab() {
                   ],
                 }))}
               />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                賣出手續費已含 SEC 規費 + FINRA TAF{store.settings.regulatoryFees.enabled ? '（已啟用）' : '（已關閉）'}，可於「設定」調整。
+              </div>
             </div>
           ) : (
             <EmptyState text="請先建立帳戶、配置與報價資料" />
@@ -1053,62 +1169,16 @@ export default function UsRebalanceTab() {
 
       {activeTab === 'settings' && (
         <Section title="系統設定">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="font-medium text-[#1A1A2E]">費率模板</div>
-              <select
-                value={store.settings.profileId}
-                onChange={(e) => updateSettings({ profileId: e.target.value as UsFeeProfileId })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-              >
-                <option value="standard">凱基一般單筆</option>
-                <option value="promo_no_min">凱基優惠無低消</option>
-                <option value="dca">凱基定期定額</option>
-                <option value="custom">自訂</option>
-              </select>
-
-              <div className="grid grid-cols-2 gap-3">
-                <FeeInput label="買入費率" value={store.settings.customFees.buyRate} onChange={(value) => updateCustomFee(updateSettings, store.settings.customFees, { buyRate: value })} />
-                <FeeInput label="買入最低 USD" value={store.settings.customFees.buyMinUsd} onChange={(value) => updateCustomFee(updateSettings, store.settings.customFees, { buyMinUsd: value })} />
-                <FeeInput label="賣出費率" value={store.settings.customFees.sellRate} onChange={(value) => updateCustomFee(updateSettings, store.settings.customFees, { sellRate: value })} />
-                <FeeInput label="賣出最低 USD" value={store.settings.customFees.sellMinUsd} onChange={(value) => updateCustomFee(updateSettings, store.settings.customFees, { sellMinUsd: value })} />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="font-medium text-[#1A1A2E]">匯入 / 匯出</div>
-              <div className="flex gap-2">
-                <button onClick={() => setImportExportJson(exportJSON())} className="rounded-xl bg-[#2C5F8A] text-white text-sm px-4 py-2.5">匯出 JSON</button>
-                <button
-                  onClick={() => {
-                    if (!importExportJson.trim()) return
-                    importJSON(importExportJson)
-                  }}
-                  className="rounded-xl border border-slate-200 text-sm px-4 py-2.5"
-                >
-                  匯入 JSON
-                </button>
-              </div>
-              <textarea
-                value={importExportJson}
-                onChange={(e) => setImportExportJson(e.target.value)}
-                className="w-full min-h-[240px] rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-mono"
-                placeholder="匯出後的 JSON 或欲匯入資料"
-              />
-            </div>
-          </div>
+          <UsRebalanceSettings
+            settings={store.settings}
+            onUpdateSettings={updateSettings}
+            onExportJSON={exportJSON}
+            onImportJSON={importJSON}
+          />
         </Section>
       )}
     </div>
   )
-}
-
-function updateCustomFee(
-  updateSettings: (patch: { customFees: UsCustomFeeSettings }) => void,
-  current: UsCustomFeeSettings,
-  patch: Partial<UsCustomFeeSettings>,
-) {
-  updateSettings({ customFees: { ...current, ...patch } })
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -1137,22 +1207,6 @@ function MetricCard({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
       <div className="text-[11px] text-slate-400 uppercase tracking-wider">{label}</div>
       <div className="mt-1 text-sm font-bold font-mono text-[#1A1A2E]">{value}</div>
-    </div>
-  )
-}
-
-function FeeInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return (
-    <div>
-      <label className="text-[11px] text-slate-400 block mb-1.5">{label}</label>
-      <input
-        type="number"
-        min={0}
-        step={0.0001}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono"
-      />
     </div>
   )
 }
