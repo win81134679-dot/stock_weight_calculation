@@ -32,8 +32,6 @@ export default function TargetValueAdvisor({
   const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id ?? '')
   const [targetTotalValue, setTargetTotalValue] = useState<number>(0)
   const [targetInputStr, setTargetInputStr] = useState<string>('0')
-  const [externalFund, setExternalFund] = useState<number>(0)
-  const [externalInputStr, setExternalInputStr] = useState<string>('0')
   const [slippageRate, setSlippageRate] = useState<number>(0.03) // 預設 3%
 
   // 實際賣出回填：{ code: { actualShares, actualProceeds } }
@@ -71,6 +69,35 @@ export default function TargetValueAdvisor({
     })
   }, [sellSuggestions, actualSells])
 
+  // Step 2.5: 計算實際賣出總收入 + 需補金額（自動）
+  const actualSellProceeds = useMemo(() => {
+    return sellEntries
+      .filter(e => e.actualProceeds !== undefined)
+      .reduce((sum, e) => sum + (e.actualProceeds || 0), 0)
+  }, [sellEntries])
+
+  const externalFund = useMemo(() => {
+    if (targetTotalValue <= 0 || actualSellProceeds === 0) return 0
+
+    // 計算保留持股的市值（未賣出的部分）
+    const acctHoldings = holdings.filter(h => h.accountId === selectedAccountId)
+    const sellCodesMap = new Map(
+      sellEntries
+        .filter(e => e.actualShares !== undefined)
+        .map(e => [e.code, e.actualShares || 0])
+    )
+
+    const remainingValue = acctHoldings.reduce((sum, h) => {
+      const soldShares = sellCodesMap.get(h.code) || 0
+      const remainingShares = h.shares - soldShares
+      const price = prices[h.code]?.price ?? 0
+      return sum + Math.max(0, remainingShares) * price
+    }, 0)
+
+    // 需補金額 = 目標總市值 - 保留持股市值 - 賣出收入
+    return targetTotalValue - remainingValue - actualSellProceeds
+  }, [targetTotalValue, actualSellProceeds, holdings, selectedAccountId, sellEntries, prices])
+
   // Step 3: 計算買入建議（基於實際賣出收入）
   const result = useMemo(() => {
     if (!selectedAccountId || targetWeights.length === 0 || targetTotalValue <= 0) return null
@@ -96,12 +123,6 @@ export default function TargetValueAdvisor({
     setTargetInputStr(raw)
     const n = parseFloat(raw.replace(/,/g, ''))
     if (!isNaN(n) && n >= 0) setTargetTotalValue(n)
-  }
-
-  function handleExternalInput(raw: string) {
-    setExternalInputStr(raw)
-    const n = parseFloat(raw.replace(/,/g, ''))
-    if (!isNaN(n)) setExternalFund(n)
   }
 
   function handleQuick(amount: number) {
@@ -307,22 +328,41 @@ export default function TargetValueAdvisor({
         </div>
       )}
 
-      {/* External Fund Input */}
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          額外投入金額（可選）
-        </label>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-700 font-medium">NT$</span>
-          <input
-            type="text"
-            value={externalInputStr}
-            onChange={(e) => handleExternalInput(e.target.value)}
-            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg"
-            placeholder="0"
-          />
+      {/* External Fund Display (Auto-calculated) */}
+      {actualSellProceeds > 0 && targetTotalValue > 0 && (
+        <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-700 mb-1">交割款試算</h3>
+              <p className="text-xs text-slate-600">基於實際賣出收入計算</p>
+            </div>
+            <div className="text-right">
+              {externalFund > 0 ? (
+                <>
+                  <div className="text-sm text-slate-600">需再補</div>
+                  <div className="text-2xl font-bold text-red-600">
+                    NT${formatMoney(externalFund)}
+                  </div>
+                </>
+              ) : externalFund < 0 ? (
+                <>
+                  <div className="text-sm text-slate-600">剩餘</div>
+                  <div className="text-2xl font-bold text-green-600">
+                    NT${formatMoney(Math.abs(externalFund))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-sm text-slate-600">剛好打平</div>
+                  <div className="text-2xl font-bold text-slate-600">
+                    NT$0
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Slippage Protection */}
       <div>
