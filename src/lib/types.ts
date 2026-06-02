@@ -324,20 +324,56 @@ export interface HybridRebalancePlan {
   warnings: string[]
 }
 
-/** 目標總市值配置 — 整體計畫 */
+/** 換倉賣出項目 */
+export interface SellEntry {
+  code: string                // 股票代碼
+  shares: number              // 賣出股數
+  actualProceeds: number      // 實際淨收入（已扣手續費與稅）
+  estimatedProceeds?: number  // 預估淨收入（供參考）
+}
+
+/** 持倉對比項目（調倉前後） */
+export interface HoldingComparison {
+  code: string
+  name: string
+
+  // 調倉前
+  beforeShares: number
+  beforeValue: number
+  beforeWeight: number
+
+  // 調倉後
+  afterShares: number
+  afterValue: number
+  afterWeight: number
+
+  // 變化
+  sharesChange: number
+  valueChange: number
+  weightChange: number
+}
+
+/** 目標總市值配置 — 整體計畫（含滑價保護） */
 export interface TargetValueRebalancePlan {
   accountId: string
 
   // 現況
   currentTotalValue: number
   currentTotalCost: number
+  currentHoldings: Holding[]
 
   // 目標
   targetTotalValue: number
-  realizedPnL: number         // 已實現損益（本次換倉賣出）
+  externalFund: number        // 外部投入金額（可選）
+  slippageRate: number        // 滑價保護率（0-0.1）
 
-  // 需投入金額
-  requiredFund: number        // targetTotalValue - currentTotalValue - realizedPnL
+  // 換倉賣出
+  sellEntries: SellEntry[]
+  totalSellProceeds: number   // 賣出總淨收入
+
+  // 可用資金
+  availableFund: number       // totalSellProceeds + externalFund
+  protectedFund: number       // availableFund / (1 + slippageRate)
 
   // 操作摘要
   actions: HybridRebalanceAction[]
@@ -346,6 +382,9 @@ export interface TargetValueRebalancePlan {
   totalBuyCost: number
   totalSellReturn: number
   netCashFlow: number
+
+  // 持倉對比
+  holdingComparisons: HoldingComparison[]
 
   // 調整後預估
   afterTotalCost: number      // 調整後總成本
