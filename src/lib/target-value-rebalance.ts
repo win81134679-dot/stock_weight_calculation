@@ -228,11 +228,12 @@ export function calcTargetValueRebalance(
       }
     }
 
-    const diffValue = targetValue - currentValue
+    // 計算需要買入的市值（目標市值 - 目前市值）
+    const needBuyValue = targetValue - currentValue
 
     // 只處理買入（賣出已在 sellEntries 處理）
-    if (diffValue <= 0) {
-      // HOLD
+    if (needBuyValue <= 0) {
+      // HOLD：目前市值已達或超過目標市值
       const newWeight = safePct(currentValue, targetTotalValue)
       return {
         code: tw.code,
@@ -256,16 +257,30 @@ export function calcTargetValueRebalance(
       }
     }
 
-    // 套用滑價保護計算可買股數
-    const maxBuyValue = protectedFund * (tw.weight / 100)  // 按權重分配保護後資金
+    // BUY：計算在滑價保護限制下可買入的股數
+    // 理論上應買入：needBuyValue / price 股
+    // 但要受限於可用資金（protectedFund）的比例分配
 
-    // 迭代法計算可買股數（確保含手續費後不超過預算）
-    let buyShares = Math.floor(maxBuyValue / (price * (1 + getActualFeeRate(discount))))
+    // 計算這檔在所有需買入標的中的權重佔比
+    const totalNeedBuyValue = targetWeights.reduce((sum, t) => {
+      const h = remainingHoldings.find(rh => rh.code === t.code)
+      const cv = (h?.shares ?? 0) * (prices[t.code]?.price ?? 0)
+      const tv = targetTotalValue * (t.weight / 100)
+      return sum + Math.max(0, tv - cv)
+    }, 0)
+
+    // 按需求比例分配保護後資金
+    const allocatedFund = totalNeedBuyValue > 0
+      ? protectedFund * (needBuyValue / totalNeedBuyValue)
+      : 0
+
+    // 迭代法計算可買股數（確保含手續費後不超過分配資金）
+    let buyShares = Math.floor(allocatedFund / (price * (1 + getActualFeeRate(discount))))
 
     while (buyShares > 0) {
       const estimatedAmount = Math.round(buyShares * price)
       const fee = calcFee(estimatedAmount, discount)
-      if (estimatedAmount + fee <= maxBuyValue) break
+      if (estimatedAmount + fee <= allocatedFund) break
       buyShares--
     }
 
