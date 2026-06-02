@@ -39,11 +39,75 @@ export function calcEstimatedSellProceeds(
 }
 
 /**
+ * 計算賣出建議（哪些標的超過目標權重 → 需要減碼）
+ */
+export function calcSellSuggestions(
+  accountId: string,
+  holdings: Holding[],
+  prices: Record<string, PriceCache>,
+  targetWeights: TargetWeight[],
+  targetTotalValue: number,
+  discount: number
+): SellEntry[] {
+  const acctHoldings = holdings.filter((h) => h.accountId === accountId)
+
+  // 計算目前總市值
+  const currentTotalValue = acctHoldings.reduce((sum, h) => {
+    const p = prices[h.code]?.price ?? 0
+    return sum + h.shares * p
+  }, 0)
+
+  const suggestions: SellEntry[] = []
+
+  targetWeights.forEach((tw) => {
+    const holding = acctHoldings.find((h) => h.code === tw.code)
+    if (!holding) return
+
+    const price = prices[tw.code]?.price ?? 0
+    if (price <= 0) return
+
+    const currentValue = holding.shares * price
+    const currentWeight = safePct(currentValue, currentTotalValue)
+    const targetValue = targetTotalValue * (tw.weight / 100)
+
+    // 如果目前市值 > 目標市值 → 需要賣出
+    if (currentValue > targetValue) {
+      const excessValue = currentValue - targetValue
+      const suggestedShares = Math.floor(excessValue / price)
+
+      if (suggestedShares > 0) {
+        const estimatedProceeds = calcEstimatedSellProceeds(
+          suggestedShares,
+          price,
+          discount,
+          tw.isETF
+        )
+
+        suggestions.push({
+          code: tw.code,
+          name: tw.name,
+          currentShares: holding.shares,
+          currentValue,
+          currentWeight,
+          targetWeight: tw.weight,
+          suggestedShares,
+          estimatedProceeds,
+          actualShares: undefined,
+          actualProceeds: undefined,
+        })
+      }
+    }
+  })
+
+  return suggestions
+}
+
+/**
  * 目標總市值配置：依目標總市值與目標權重計算買賣清單（含滑價保護）
  *
  * 核心邏輯：
- * 1. 計算換倉賣出總收入（使用者輸入實際成交金額）
- * 2. 計算可用資金 = 賣出收入 + 外部投入
+ * 1. 計算換倉賣出總收入（使用者回填實際成交金額）
+ * 2. 計算可用資金 = 實際賣出收入 + 外部投入
  * 3. 套用滑價保護（僅買入）：protectedFund = availableFund / (1 + slippageRate)
  * 4. 依目標權重分配資金，計算可買股數（在 protectedFund 限制下，避免違約交割）
  * 5. 計算持倉對比、交割款明細
@@ -61,11 +125,17 @@ export function calcTargetValueRebalance(
 ): TargetValueRebalancePlan {
   const acctHoldings = holdings.filter((h) => h.accountId === accountId)
 
-  // 1. 計算換倉賣出總收入
-  const totalSellProceeds = sellEntries.reduce((sum, e) => sum + e.actualProceeds, 0)
+  // 1. 計算換倉賣出總收入（僅計算有實際回填的）
+  const totalSellProceeds = sellEntries
+    .filter(e => e.actualProceeds !== undefined && e.actualShares !== undefined)
+    .reduce((sum, e) => sum + (e.actualProceeds || 0), 0)
 
   // 2. 計算目前總市值與總成本（扣除已賣出部位）
-  const sellCodesMap = new Map(sellEntries.map(e => [e.code, e.shares]))
+  const sellCodesMap = new Map(
+    sellEntries
+      .filter(e => e.actualShares !== undefined)
+      .map(e => [e.code, e.actualShares || 0])
+  )
 
   const remainingHoldings: Holding[] = acctHoldings.map(h => {
     const sellShares = sellCodesMap.get(h.code) || 0

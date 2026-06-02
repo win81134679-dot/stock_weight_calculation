@@ -91,19 +91,23 @@ export function exportTargetValuePlanToPDF(
     doc.text('Sell Entries', margin, yPos)
     yPos += 7
 
-    const sellTableData = plan.sellEntries.map(e => [
-      e.code,
-      displayShares(e.shares),
-      `$${formatMoney(e.actualProceeds)}`,
-      e.estimatedProceeds ? `$${formatMoney(e.estimatedProceeds)}` : '-'
-    ])
+    const sellTableData = plan.sellEntries
+      .filter(e => e.actualShares !== undefined && e.actualProceeds !== undefined)
+      .map(e => [
+        e.code,
+        e.name,
+        displayShares(e.suggestedShares),
+        `$${formatMoney(e.estimatedProceeds)}`,
+        e.actualShares !== undefined ? displayShares(e.actualShares) : '-',
+        e.actualProceeds !== undefined ? `$${formatMoney(e.actualProceeds)}` : '-',
+      ])
 
     autoTable(doc, {
       startY: yPos,
-      head: [['Code', 'Shares', 'Actual Proceeds', 'Estimated']],
+      head: [['Code', 'Name', 'Suggested', 'Estimated', 'Actual Shares', 'Actual Proceeds']],
       body: sellTableData,
       theme: 'striped',
-      styles: { fontSize: 8, cellPadding: 2 },
+      styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [220, 53, 69], textColor: 255 },
       margin: { left: margin }
     })

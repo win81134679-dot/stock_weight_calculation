@@ -657,4 +657,4 @@ export function calcHybridRebalance(
 // 目標總市值配置（已移至 target-value-rebalance.ts）
 // ============================================================
 
-export { calcTargetValueRebalance, calcEstimatedSellProceeds } from './target-value-rebalance'
+export { calcTargetValueRebalance, calcEstimatedSellProceeds, calcSellSuggestions } from './target-value-rebalance'

@@ -327,9 +327,15 @@ export interface HybridRebalancePlan {
 /** 換倉賣出項目 */
 export interface SellEntry {
   code: string                // 股票代碼
-  shares: number              // 賣出股數
-  actualProceeds: number      // 實際淨收入（已扣手續費與稅）
-  estimatedProceeds?: number  // 預估淨收入（供參考）
+  name: string                // 股票名稱
+  currentShares: number       // 目前持股數
+  currentValue: number        // 目前市值
+  currentWeight: number       // 目前權重 %
+  targetWeight: number        // 目標權重 %
+  suggestedShares: number     // 建議賣出股數（系統計算）
+  estimatedProceeds: number   // 預估淨收入（供參考）
+  actualShares?: number       // 實際賣出股數（使用者回填）
+  actualProceeds?: number     // 實際淨收入（使用者回填，已扣手續費與稅）
 }
 
 /** 持倉對比項目（調倉前後） */
