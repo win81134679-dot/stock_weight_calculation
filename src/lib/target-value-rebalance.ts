@@ -39,7 +39,7 @@ export function calcEstimatedSellProceeds(
 }
 
 /**
- * 計算賣出建議（哪些標的超過目標權重 → 需要減碼）
+ * 計算賣出建議（顯示所有配置標的，標註哪些需要減碼）
  */
 export function calcSellSuggestions(
   accountId: string,
@@ -59,44 +59,48 @@ export function calcSellSuggestions(
 
   const suggestions: SellEntry[] = []
 
+  // 遍歷所有配置標的（不只是需要賣出的）
   targetWeights.forEach((tw) => {
     const holding = acctHoldings.find((h) => h.code === tw.code)
-    if (!holding) return
-
     const price = prices[tw.code]?.price ?? 0
-    if (price <= 0) return
 
-    const currentValue = holding.shares * price
+    const currentShares = holding?.shares ?? 0
+    const currentValue = currentShares * price
     const currentWeight = safePct(currentValue, currentTotalValue)
     const targetValue = targetTotalValue * (tw.weight / 100)
 
-    // 如果目前市值 > 目標市值 → 需要賣出
-    if (currentValue > targetValue) {
+    // 計算是否需要賣出
+    let suggestedShares = 0
+    let estimatedProceeds = 0
+
+    if (price > 0 && currentValue > targetValue) {
+      // 目前市值 > 目標市值 → 需要賣出
       const excessValue = currentValue - targetValue
-      const suggestedShares = Math.floor(excessValue / price)
+      suggestedShares = Math.floor(excessValue / price)
 
       if (suggestedShares > 0) {
-        const estimatedProceeds = calcEstimatedSellProceeds(
+        estimatedProceeds = calcEstimatedSellProceeds(
           suggestedShares,
           price,
           discount,
           tw.isETF
         )
-
-        suggestions.push({
-          code: tw.code,
-          name: tw.name,
-          currentShares: holding.shares,
-          currentValue,
-          currentWeight,
-          targetWeight: tw.weight,
-          suggestedShares,
-          estimatedProceeds,
-          actualShares: undefined,
-          actualProceeds: undefined,
-        })
       }
     }
+
+    // 加入所有標的（賣出、持有、買入都顯示）
+    suggestions.push({
+      code: tw.code,
+      name: tw.name,
+      currentShares,
+      currentValue,
+      currentWeight,
+      targetWeight: tw.weight,
+      suggestedShares,  // 0 表示不需賣出（持有或買入）
+      estimatedProceeds,
+      actualShares: undefined,
+      actualProceeds: undefined,
+    })
   })
 
   return suggestions

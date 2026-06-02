@@ -190,9 +190,9 @@ export default function TargetValueAdvisor({
       {sellSuggestions.length > 0 && (
         <div className="border border-slate-200 rounded-lg overflow-hidden">
           <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-            <h3 className="font-semibold text-slate-800">📉 換倉賣出建議（系統計算）</h3>
+            <h3 className="font-semibold text-slate-800">📊 配置標的檢視與換倉建議</h3>
             <p className="text-sm text-slate-600 mt-1">
-              以下標的目前市值超過目標權重，建議減碼。請執行賣出後，回填「實際成交股數」與「實際淨收入」。
+              顯示所有配置標的目前狀態。需要賣出的標的請執行賣出後，回填「實際成交股數」與「實際淨收入」。
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -201,6 +201,7 @@ export default function TargetValueAdvisor({
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-700">代碼</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-700">名稱</th>
+                  <th className="px-4 py-2 text-center text-xs font-medium text-slate-700">建議操作</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-slate-700">目前持股</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-slate-700">目前權重</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-slate-700">目標權重</th>
@@ -219,39 +220,66 @@ export default function TargetValueAdvisor({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {sellSuggestions.map((sug) => (
-                  <tr key={sug.code} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm font-medium text-slate-800">{sug.code}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">{sug.name}</td>
-                    <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.currentShares}股</td>
-                    <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.currentWeight.toFixed(1)}%</td>
-                    <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.targetWeight.toFixed(1)}%</td>
-                    <td className="px-4 py-3 text-sm text-right font-semibold text-amber-700 bg-amber-50">
-                      {sug.suggestedShares}股
-                    </td>
-                    <td className="px-4 py-3 text-sm text-right font-semibold text-amber-700 bg-amber-50">
-                      NT${formatMoney(sug.estimatedProceeds)}
-                    </td>
-                    <td className="px-4 py-3 bg-blue-50">
-                      <input
-                        type="number"
-                        placeholder={sug.suggestedShares.toString()}
-                        value={actualSells[sug.code]?.actualShares || ''}
-                        onChange={(e) => handleActualSellInput(sug.code, 'actualShares', e.target.value)}
-                        className="w-full px-2 py-1 text-sm text-right border border-blue-300 rounded"
-                      />
-                    </td>
-                    <td className="px-4 py-3 bg-blue-50">
-                      <input
-                        type="number"
-                        placeholder={sug.estimatedProceeds.toString()}
-                        value={actualSells[sug.code]?.actualProceeds || ''}
-                        onChange={(e) => handleActualSellInput(sug.code, 'actualProceeds', e.target.value)}
-                        className="w-full px-2 py-1 text-sm text-right border border-blue-300 rounded"
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {sellSuggestions.map((sug) => {
+                  const actionType = sug.suggestedShares > 0 ? 'sell' : sug.currentShares > 0 ? 'hold' : 'buy'
+                  const actionLabel = actionType === 'sell' ? '賣出' : actionType === 'hold' ? '持有' : '買入'
+                  const actionColor = actionType === 'sell' ? 'bg-red-100 text-red-700' : actionType === 'hold' ? 'bg-slate-100 text-slate-600' : 'bg-green-100 text-green-700'
+
+                  return (
+                    <tr key={sug.code} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-sm font-medium text-slate-800">{sug.code}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{sug.name}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${actionColor}`}>
+                          {actionLabel}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.currentShares}股</td>
+                      <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.currentWeight.toFixed(1)}%</td>
+                      <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.targetWeight.toFixed(1)}%</td>
+                      <td className="px-4 py-3 text-sm text-right font-semibold bg-amber-50">
+                        {sug.suggestedShares > 0 ? (
+                          <span className="text-red-700">{sug.suggestedShares}股</span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-semibold bg-amber-50">
+                        {sug.estimatedProceeds > 0 ? (
+                          <span className="text-red-700">NT${formatMoney(sug.estimatedProceeds)}</span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 bg-blue-50">
+                        {sug.suggestedShares > 0 ? (
+                          <input
+                            type="number"
+                            placeholder={sug.suggestedShares.toString()}
+                            value={actualSells[sug.code]?.actualShares || ''}
+                            onChange={(e) => handleActualSellInput(sug.code, 'actualShares', e.target.value)}
+                            className="w-full px-2 py-1 text-sm text-right border border-blue-300 rounded"
+                          />
+                        ) : (
+                          <span className="text-sm text-slate-400 block text-right">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 bg-blue-50">
+                        {sug.suggestedShares > 0 ? (
+                          <input
+                            type="number"
+                            placeholder={sug.estimatedProceeds.toString()}
+                            value={actualSells[sug.code]?.actualProceeds || ''}
+                            onChange={(e) => handleActualSellInput(sug.code, 'actualProceeds', e.target.value)}
+                            className="w-full px-2 py-1 text-sm text-right border border-blue-300 rounded"
+                          />
+                        ) : (
+                          <span className="text-sm text-slate-400 block text-right">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
