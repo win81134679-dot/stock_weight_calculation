@@ -325,6 +325,18 @@ export default function TargetValueAdvisor({
               </tbody>
             </table>
           </div>
+
+          {/* 實際淨收入總計 */}
+          {actualSellProceeds > 0 && (
+            <div className="px-4 py-3 bg-blue-50 border-t-2 border-blue-300">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold text-slate-700">實際淨收入總計</span>
+                <span className="text-lg font-bold text-blue-700">
+                  NT${formatMoney(actualSellProceeds)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
