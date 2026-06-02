@@ -11,9 +11,12 @@ import {
   DeviationInvestSummary,
   RebalanceAction,
   RebalancePlan,
+  HybridRebalanceAction,
+  HybridRebalancePlan,
+  TargetValueRebalancePlan,
   PriceCache,
 } from './types'
-import { calcFee, getActualFeeRate } from './calculator'
+import { calcFee, getActualFeeRate, formatMoney } from './calculator'
 
 const MIN_FEE = 20
 const ETF_TAX_RATE = 0.001
@@ -448,4 +451,429 @@ export function daysUntilRebalance(nextDateStr: string): number {
   const next = new Date(nextDateStr)
   const diff = next.getTime() - now.getTime()
   return Math.ceil(diff / (1000 * 60 * 60 * 24))
+}
+
+// ============================================================
+// 混合再平衡（加減碼 + 調倉）
+// ============================================================
+
+/**
+ * 混合型再平衡：支援加減碼 + 買賣調倉
+ *
+ * 演算法：
+ * 1. 計算目標總市值 = 目前總市值 + 加減碼金額（可為負）
+ * 2. 對每個目標權重標的計算「目標市值 - 目前市值」
+ * 3. 差額 > 0 → 買入；差額 < 0 → 賣出；差額 = 0 → 持有
+ * 4. 計算總買入成本、總賣出淨收入、淨現金流、剩餘現金
+ * 5. 檢查警示（如贖回資金不足）
+ *
+ * @param accountId - 帳戶 ID
+ * @param holdings - 所有帳戶持倉
+ * @param prices - 即時價格
+ * @param targetWeights - 目標配置
+ * @param additionalFund - 加減碼金額（正數=加碼，負數=贖回）
+ * @param discount - 手續費折扣（1-10）
+ * @returns 混合再平衡計畫
+ */
+export function calcHybridRebalance(
+  accountId: string,
+  holdings: Holding[],
+  prices: Record<string, PriceCache>,
+  targetWeights: TargetWeight[],
+  additionalFund: number,
+  discount: number
+): HybridRebalancePlan {
+  const acctHoldings = holdings.filter((h) => h.accountId === accountId)
+
+  // 1. 計算現況總市值
+  const currentTotalValue = acctHoldings.reduce((sum, h) => {
+    const p = prices[h.code]?.price ?? 0
+    return sum + h.shares * p
+  }, 0)
+
+  // 2. 目標總市值
+  const targetTotalValue = currentTotalValue + additionalFund
+
+  // 3. 對每個目標權重標的計算買賣
+  let totalBuyCost = 0
+  let totalSellReturn = 0
+
+  const actions: HybridRebalanceAction[] = targetWeights.map((tw) => {
+    const holding = acctHoldings.find((h) => h.code === tw.code)
+    const price = prices[tw.code]?.price ?? 0
+    const currentShares = holding?.shares ?? 0
+    const currentValue = currentShares * price
+
+    const targetValue = targetTotalValue * (tw.weight / 100)
+    const currentWeight = safePct(currentValue, currentTotalValue)
+
+    // 無報價或目標總市值為零
+    if (price <= 0 || targetTotalValue <= 0) {
+      return {
+        code: tw.code,
+        name: tw.name,
+        price,
+        currentShares,
+        currentValue,
+        currentWeight,
+        targetWeight: tw.weight,
+        targetValue: 0,
+        action: 'hold' as const,
+        sharesChange: 0,
+        estimatedAmount: 0,
+        fee: 0,
+        tax: 0,
+        totalCost: 0,
+        newShares: currentShares,
+        newValue: currentValue,
+        newWeight: currentWeight,
+        weightDeviation: currentWeight - tw.weight,
+      }
+    }
+
+    const diffValue = targetValue - currentValue
+    const diffShares = Math.round(diffValue / price)
+
+    const taxRate = tw.isETF ? ETF_TAX_RATE : STOCK_TAX_RATE
+
+    // HOLD
+    if (Math.abs(diffShares) === 0) {
+      const newWeight = safePct(currentValue, targetTotalValue)
+      return {
+        code: tw.code,
+        name: tw.name,
+        price,
+        currentShares,
+        currentValue,
+        currentWeight,
+        targetWeight: tw.weight,
+        targetValue,
+        action: 'hold' as const,
+        sharesChange: 0,
+        estimatedAmount: 0,
+        fee: 0,
+        tax: 0,
+        totalCost: 0,
+        newShares: currentShares,
+        newValue: currentValue,
+        newWeight,
+        weightDeviation: newWeight - tw.weight,
+      }
+    }
+
+    // BUY
+    if (diffShares > 0) {
+      const estimatedAmount = Math.round(diffShares * price)
+      const fee = calcFee(estimatedAmount, discount)
+      const totalCost = estimatedAmount + fee
+      totalBuyCost += totalCost
+
+      const newShares = currentShares + diffShares
+      const newValue = newShares * price
+      const newWeight = safePct(newValue, targetTotalValue)
+
+      return {
+        code: tw.code,
+        name: tw.name,
+        price,
+        currentShares,
+        currentValue,
+        currentWeight,
+        targetWeight: tw.weight,
+        targetValue,
+        action: 'buy' as const,
+        sharesChange: diffShares,
+        estimatedAmount,
+        fee,
+        tax: 0,
+        totalCost,
+        newShares,
+        newValue,
+        newWeight,
+        weightDeviation: newWeight - tw.weight,
+      }
+    }
+
+    // SELL
+    const sellShares = Math.abs(diffShares)
+    const estimatedAmount = Math.round(sellShares * price)
+    const fee = calcFee(estimatedAmount, discount)
+    const tax = Math.round(estimatedAmount * taxRate)
+    const netReturn = estimatedAmount - fee - tax
+    totalSellReturn += netReturn
+
+    const newShares = currentShares - sellShares
+    const newValue = newShares * price
+    const newWeight = safePct(newValue, targetTotalValue)
+
+    return {
+      code: tw.code,
+      name: tw.name,
+      price,
+      currentShares,
+      currentValue,
+      currentWeight,
+      targetWeight: tw.weight,
+      targetValue,
+      action: 'sell' as const,
+      sharesChange: -sellShares,
+      estimatedAmount,
+      fee,
+      tax,
+      totalCost: -netReturn,
+      newShares,
+      newValue,
+      newWeight,
+      weightDeviation: newWeight - tw.weight,
+    }
+  })
+
+  // 4. 彙總現金流
+  const netCashFlow = totalBuyCost - totalSellReturn
+  const remainingCash = additionalFund - netCashFlow
+
+  // 5. 警示檢查
+  const warnings: string[] = []
+  if (remainingCash < 0) {
+    warnings.push(
+      `贖回資金不足，需額外投入 $${formatMoney(Math.abs(remainingCash))}`
+    )
+  }
+
+  return {
+    accountId,
+    currentTotalValue,
+    additionalFund,
+    targetTotalValue,
+    actions,
+    totalBuyCost,
+    totalSellReturn,
+    netCashFlow,
+    remainingCash,
+    warnings,
+  }
+}
+
+// ============================================================
+// 目標總市值配置
+// ============================================================
+
+/**
+ * 目標總市值配置：依目標總市值與目標權重計算買賣清單
+ *
+ * 演算法：
+ * 1. 計算目前總市值、總成本
+ * 2. 需投入金額 = 目標總市值 - 目前總市值 - 已實現損益
+ * 3. 對每個目標權重標的計算「目標市值 - 目前市值」
+ * 4. 差額 > 0 → 買入；差額 < 0 → 賣出
+ * 5. 計算調整後總成本、總市值、未實現損益
+ *
+ * @param accountId - 帳戶 ID
+ * @param holdings - 所有帳戶持倉
+ * @param prices - 即時價格
+ * @param targetWeights - 目標配置
+ * @param targetTotalValue - 目標總市值
+ * @param realizedPnL - 已實現損益（賣出獲利可再投入，減少需投入金額）
+ * @param discount - 手續費折扣（1-10）
+ * @returns 目標總市值配置計畫
+ */
+export function calcTargetValueRebalance(
+  accountId: string,
+  holdings: Holding[],
+  prices: Record<string, PriceCache>,
+  targetWeights: TargetWeight[],
+  targetTotalValue: number,
+  realizedPnL: number,
+  discount: number
+): TargetValueRebalancePlan {
+  const acctHoldings = holdings.filter((h) => h.accountId === accountId)
+
+  // 1. 計算現況
+  const currentTotalValue = acctHoldings.reduce((sum, h) => {
+    const p = prices[h.code]?.price ?? 0
+    return sum + h.shares * p
+  }, 0)
+
+  const currentTotalCost = acctHoldings.reduce((sum, h) => {
+    return sum + Math.floor(h.shares * h.avgCost)
+  }, 0)
+
+  // 2. 需投入金額
+  const requiredFund = targetTotalValue - currentTotalValue - realizedPnL
+
+  // 3. 對每個目標權重標的計算買賣（同 calcHybridRebalance 邏輯）
+  let totalBuyCost = 0
+  let totalSellReturn = 0
+
+  const actions: HybridRebalanceAction[] = targetWeights.map((tw) => {
+    const holding = acctHoldings.find((h) => h.code === tw.code)
+    const price = prices[tw.code]?.price ?? 0
+    const currentShares = holding?.shares ?? 0
+    const currentValue = currentShares * price
+
+    const targetValue = targetTotalValue * (tw.weight / 100)
+    const currentWeight = safePct(currentValue, currentTotalValue)
+
+    // 無報價或目標總市值為零
+    if (price <= 0 || targetTotalValue <= 0) {
+      return {
+        code: tw.code,
+        name: tw.name,
+        price,
+        currentShares,
+        currentValue,
+        currentWeight,
+        targetWeight: tw.weight,
+        targetValue: 0,
+        action: 'hold' as const,
+        sharesChange: 0,
+        estimatedAmount: 0,
+        fee: 0,
+        tax: 0,
+        totalCost: 0,
+        newShares: currentShares,
+        newValue: currentValue,
+        newWeight: currentWeight,
+        weightDeviation: currentWeight - tw.weight,
+      }
+    }
+
+    const diffValue = targetValue - currentValue
+    const diffShares = Math.round(diffValue / price)
+
+    const taxRate = tw.isETF ? ETF_TAX_RATE : STOCK_TAX_RATE
+
+    // HOLD
+    if (Math.abs(diffShares) === 0) {
+      const newWeight = safePct(currentValue, targetTotalValue)
+      return {
+        code: tw.code,
+        name: tw.name,
+        price,
+        currentShares,
+        currentValue,
+        currentWeight,
+        targetWeight: tw.weight,
+        targetValue,
+        action: 'hold' as const,
+        sharesChange: 0,
+        estimatedAmount: 0,
+        fee: 0,
+        tax: 0,
+        totalCost: 0,
+        newShares: currentShares,
+        newValue: currentValue,
+        newWeight,
+        weightDeviation: newWeight - tw.weight,
+      }
+    }
+
+    // BUY
+    if (diffShares > 0) {
+      const estimatedAmount = Math.round(diffShares * price)
+      const fee = calcFee(estimatedAmount, discount)
+      const totalCost = estimatedAmount + fee
+      totalBuyCost += totalCost
+
+      const newShares = currentShares + diffShares
+      const newValue = newShares * price
+      const newWeight = safePct(newValue, targetTotalValue)
+
+      return {
+        code: tw.code,
+        name: tw.name,
+        price,
+        currentShares,
+        currentValue,
+        currentWeight,
+        targetWeight: tw.weight,
+        targetValue,
+        action: 'buy' as const,
+        sharesChange: diffShares,
+        estimatedAmount,
+        fee,
+        tax: 0,
+        totalCost,
+        newShares,
+        newValue,
+        newWeight,
+        weightDeviation: newWeight - tw.weight,
+      }
+    }
+
+    // SELL
+    const sellShares = Math.abs(diffShares)
+    const estimatedAmount = Math.round(sellShares * price)
+    const fee = calcFee(estimatedAmount, discount)
+    const tax = Math.round(estimatedAmount * taxRate)
+    const netReturn = estimatedAmount - fee - tax
+    totalSellReturn += netReturn
+
+    const newShares = currentShares - sellShares
+    const newValue = newShares * price
+    const newWeight = safePct(newValue, targetTotalValue)
+
+    return {
+      code: tw.code,
+      name: tw.name,
+      price,
+      currentShares,
+      currentValue,
+      currentWeight,
+      targetWeight: tw.weight,
+      targetValue,
+      action: 'sell' as const,
+      sharesChange: -sellShares,
+      estimatedAmount,
+      fee,
+      tax,
+      totalCost: -netReturn,
+      newShares,
+      newValue,
+      newWeight,
+      weightDeviation: newWeight - tw.weight,
+    }
+  })
+
+  // 4. 彙總現金流
+  const netCashFlow = totalBuyCost - totalSellReturn
+
+  // 5. 調整後預估
+  const afterTotalCost = currentTotalCost + netCashFlow
+  const afterTotalValue = targetTotalValue
+  const afterUnrealizedPnL = afterTotalValue - afterTotalCost
+
+  // 6. 警示檢查
+  const warnings: string[] = []
+  if (requiredFund < 0) {
+    warnings.push(
+      `目標總市值低於目前市值，將贖回 $${formatMoney(Math.abs(requiredFund))}`
+    )
+  }
+  const actualRequiredFund = netCashFlow
+  if (actualRequiredFund !== requiredFund) {
+    const diff = actualRequiredFund - requiredFund
+    if (Math.abs(diff) > 100) {
+      warnings.push(
+        `實際需投入金額與預估有差異（整股限制），實際需 $${formatMoney(actualRequiredFund)}`
+      )
+    }
+  }
+
+  return {
+    accountId,
+    currentTotalValue,
+    currentTotalCost,
+    targetTotalValue,
+    realizedPnL,
+    requiredFund,
+    actions,
+    totalBuyCost,
+    totalSellReturn,
+    netCashFlow,
+    afterTotalCost,
+    afterTotalValue,
+    afterUnrealizedPnL,
+    warnings,
+  }
 }

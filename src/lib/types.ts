@@ -270,6 +270,92 @@ export interface RebalancePlan {
   netCashFlow: number         // 正 = 需補充現金
 }
 
+/** 混合再平衡（加減碼 + 調倉）— 單標的 */
+export interface HybridRebalanceAction {
+  code: string
+  name: string
+  price: number
+
+  // 現況
+  currentShares: number
+  currentValue: number
+  currentWeight: number
+
+  // 目標
+  targetWeight: number
+  targetValue: number
+
+  // 操作
+  action: 'buy' | 'sell' | 'hold'
+  sharesChange: number        // 正 = 買, 負 = 賣
+
+  // 費用明細
+  estimatedAmount: number     // 買入總額 or 賣出總額
+  fee: number
+  tax: number
+  totalCost: number           // buy: 總花費；sell: -淨收入
+
+  // 買賣後
+  newShares: number
+  newValue: number
+  newWeight: number
+  weightDeviation: number     // 與目標的偏差
+}
+
+/** 混合再平衡（加減碼 + 調倉）— 整體 */
+export interface HybridRebalancePlan {
+  accountId: string
+
+  // 市值計算
+  currentTotalValue: number
+  additionalFund: number
+  targetTotalValue: number
+
+  // 操作摘要
+  actions: HybridRebalanceAction[]
+
+  // 現金流
+  totalBuyCost: number
+  totalSellReturn: number
+  netCashFlow: number         // 應投入現金（buy - sell）
+  remainingCash: number       // additionalFund - netCashFlow
+
+  // 警示
+  warnings: string[]
+}
+
+/** 目標總市值配置 — 整體計畫 */
+export interface TargetValueRebalancePlan {
+  accountId: string
+
+  // 現況
+  currentTotalValue: number
+  currentTotalCost: number
+
+  // 目標
+  targetTotalValue: number
+  realizedPnL: number         // 已實現損益（本次換倉賣出）
+
+  // 需投入金額
+  requiredFund: number        // targetTotalValue - currentTotalValue - realizedPnL
+
+  // 操作摘要
+  actions: HybridRebalanceAction[]
+
+  // 現金流
+  totalBuyCost: number
+  totalSellReturn: number
+  netCashFlow: number
+
+  // 調整後預估
+  afterTotalCost: number      // 調整後總成本
+  afterTotalValue: number     // 調整後總市值（應等於 targetTotalValue）
+  afterUnrealizedPnL: number  // 調整後未實現損益
+
+  // 警示
+  warnings: string[]
+}
+
 /** /api/stock-price 批次回傳格式 */
 export interface StockPriceResponse {
   stocks: YahooStockQuote[]
