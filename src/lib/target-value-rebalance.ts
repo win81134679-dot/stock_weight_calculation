@@ -39,7 +39,7 @@ export function calcEstimatedSellProceeds(
 }
 
 /**
- * 計算賣出建議（顯示所有配置標的，標註哪些需要減碼）
+ * 計算賣出建議（顯示所有配置標的 + 配置外的持股全部賣出）
  */
 export function calcSellSuggestions(
   accountId: string,
@@ -58,8 +58,9 @@ export function calcSellSuggestions(
   }, 0)
 
   const suggestions: SellEntry[] = []
+  const configCodes = new Set(targetWeights.map(tw => tw.code))
 
-  // 遍歷所有配置標的（不只是需要賣出的）
+  // 1. 遍歷所有配置標的（不只是需要賣出的）
   targetWeights.forEach((tw) => {
     const holding = acctHoldings.find((h) => h.code === tw.code)
     const price = prices[tw.code]?.price ?? 0
@@ -88,7 +89,7 @@ export function calcSellSuggestions(
       }
     }
 
-    // 加入所有標的（賣出、持有、買入都顯示）
+    // 加入所有配置標的（賣出、持有、買入都顯示）
     suggestions.push({
       code: tw.code,
       name: tw.name,
@@ -101,6 +102,34 @@ export function calcSellSuggestions(
       actualShares: undefined,
       actualProceeds: undefined,
     })
+  })
+
+  // 2. 找出配置外但有持股的標的 → 全部賣出
+  acctHoldings.forEach((holding) => {
+    if (!configCodes.has(holding.code) && holding.shares > 0) {
+      const price = prices[holding.code]?.price ?? 0
+      const currentValue = holding.shares * price
+      const currentWeight = safePct(currentValue, currentTotalValue)
+
+      // 全部賣出
+      const suggestedShares = holding.shares
+      const estimatedProceeds = price > 0
+        ? calcEstimatedSellProceeds(suggestedShares, price, discount, holding.isETF)
+        : 0
+
+      suggestions.push({
+        code: holding.code,
+        name: holding.name,
+        currentShares: holding.shares,
+        currentValue,
+        currentWeight,
+        targetWeight: 0,  // 不在配置內，目標權重 0%
+        suggestedShares,
+        estimatedProceeds,
+        actualShares: undefined,
+        actualProceeds: undefined,
+      })
+    }
   })
 
   return suggestions

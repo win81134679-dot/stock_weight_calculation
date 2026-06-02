@@ -221,12 +221,27 @@ export default function TargetValueAdvisor({
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {sellSuggestions.map((sug) => {
-                  const actionType = sug.suggestedShares > 0 ? 'sell' : sug.currentShares > 0 ? 'hold' : 'buy'
-                  const actionLabel = actionType === 'sell' ? '賣出' : actionType === 'hold' ? '持有' : '買入'
-                  const actionColor = actionType === 'sell' ? 'bg-red-100 text-red-700' : actionType === 'hold' ? 'bg-slate-100 text-slate-600' : 'bg-green-100 text-green-700'
+                  // 判斷操作類型
+                  const isOutOfConfig = sug.targetWeight === 0  // 不在配置內
+                  const isSell = sug.suggestedShares > 0
+                  const isHold = !isSell && sug.currentShares > 0
+
+                  let actionLabel = '買入'
+                  let actionColor = 'bg-green-100 text-green-700'
+
+                  if (isOutOfConfig) {
+                    actionLabel = '清倉'
+                    actionColor = 'bg-purple-100 text-purple-700'
+                  } else if (isSell) {
+                    actionLabel = '賣出'
+                    actionColor = 'bg-red-100 text-red-700'
+                  } else if (isHold) {
+                    actionLabel = '持有'
+                    actionColor = 'bg-slate-100 text-slate-600'
+                  }
 
                   return (
-                    <tr key={sug.code} className="hover:bg-slate-50">
+                    <tr key={sug.code} className={`hover:bg-slate-50 ${isOutOfConfig ? 'bg-purple-50' : ''}`}>
                       <td className="px-4 py-3 text-sm font-medium text-slate-800">{sug.code}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">{sug.name}</td>
                       <td className="px-4 py-3 text-center">
@@ -236,7 +251,13 @@ export default function TargetValueAdvisor({
                       </td>
                       <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.currentShares}股</td>
                       <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.currentWeight.toFixed(1)}%</td>
-                      <td className="px-4 py-3 text-sm text-right text-slate-700">{sug.targetWeight.toFixed(1)}%</td>
+                      <td className="px-4 py-3 text-sm text-right text-slate-700">
+                        {isOutOfConfig ? (
+                          <span className="text-purple-600 font-semibold">0% (不在配置)</span>
+                        ) : (
+                          `${sug.targetWeight.toFixed(1)}%`
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-sm text-right font-semibold bg-amber-50">
                         {sug.suggestedShares > 0 ? (
                           <span className="text-red-700">{sug.suggestedShares}股</span>
