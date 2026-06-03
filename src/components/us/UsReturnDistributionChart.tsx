@@ -57,8 +57,8 @@ export default function UsReturnDistributionChart({ snapshots }: Props) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={buckets} margin={{ top: 10, right: 10, left: 10, bottom: 30 }}>
+    <ResponsiveContainer width="100%" height={280} className="text-xs md:text-sm">
+      <BarChart data={buckets} margin={{ top: 10, right: 5, left: 0, bottom: 30 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
         <XAxis
           dataKey="range"

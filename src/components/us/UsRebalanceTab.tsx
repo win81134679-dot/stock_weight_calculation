@@ -26,6 +26,11 @@ import UsRebalanceSettings from './UsRebalanceSettings'
 import UsRiskMonitor from './UsRiskMonitor'
 import UsMonthlyPnLChart from './UsMonthlyPnLChart'
 import UsReturnDistributionChart from './UsReturnDistributionChart'
+import UsStockPerfCard from './UsStockPerfCard'
+import UsHoldingRankChart from './UsHoldingRankChart'
+import UsStockContributionChart from './UsStockContributionChart'
+import UsPortfolioHeatmap from './UsPortfolioHeatmap'
+import UsRiskRadarChart from './UsRiskRadarChart'
 
 type SubTab = 'overview' | 'holdings' | 'invest' | 'rebalance' | 'settings'
 
@@ -630,6 +635,88 @@ export default function UsRebalanceTab() {
                   <UsReturnDistributionChart snapshots={store.snapshots} />
                 </div>
               </div>
+
+              {/* 持股排行與貢獻分析 */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">持股市值排行（Top 10）</div>
+                  <UsHoldingRankChart
+                    data={combinedHoldings.map((h) => ({
+                      symbol: h.symbol,
+                      name: h.name,
+                      valueUsd: h.valueUsd,
+                      weightPct: (h.valueTwd / combinedSummary.totalValueTwd) * 100,
+                    }))}
+                  />
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">個股損益貢獻</div>
+                  <UsStockContributionChart
+                    data={combinedHoldings.map((h) => ({
+                      symbol: h.symbol,
+                      name: h.name,
+                      pnlUsd: h.valueUsd - h.shares * h.avgCostUsd,
+                    }))}
+                  />
+                </div>
+              </div>
+
+              {/* 投資組合熱力圖與風險雷達 */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">投資組合熱力圖</div>
+                  <div className="text-xs text-slate-400 mb-3">顏色 = 報酬率、大小 = 權重</div>
+                  <UsPortfolioHeatmap
+                    data={combinedHoldings.map((h) => ({
+                      symbol: h.symbol,
+                      name: h.name,
+                      valueUsd: h.valueUsd,
+                      weightPct: (h.valueTwd / combinedSummary.totalValueTwd) * 100,
+                      pnlPct: h.avgCostUsd > 0 ? ((h.priceUsd - h.avgCostUsd) / h.avgCostUsd) * 100 : 0,
+                    }))}
+                  />
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">風險分散度雷達</div>
+                  <UsRiskRadarChart
+                    metrics={{
+                      concentration: 100 - Math.max(...combinedHoldings.map((h) => (h.valueTwd / combinedSummary.totalValueTwd) * 100)),
+                      volatility: 100 - Math.abs(store.snapshots.reduce((max, s) => Math.min(max, s.combinedPnlPct), 0)),
+                      deviation: 100 - Math.max(...accountSummaries.flatMap((s) => s.holdings.map((h) => Math.abs(h.currentWeight - h.targetWeight)))),
+                      returnRate: 50 + Math.min(50, Math.max(-50, combinedSummary.pnlPct * 2)),
+                      dividendYield: Math.min(100, (combinedPnl?.dividendsNetUsd ?? 0) / Math.max(combinedSummary.totalValueUsd, 1) * 1000),
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* 個股績效卡片（前三大持股） */}
+              {combinedHoldings.slice(0, 3).length > 0 && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-3">前三大持股績效</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {combinedHoldings.slice(0, 3).map((holding) => {
+                      const targetWeight = resolvedConfig.targetWeights.find((t) => t.symbol === holding.symbol)?.weight ?? 0
+                      return (
+                        <UsStockPerfCard
+                          key={holding.symbol}
+                          symbol={holding.symbol}
+                          name={holding.name}
+                          priceUsd={holding.priceUsd}
+                          prevCloseUsd={prices[holding.symbol]?.prevCloseUsd ?? 0}
+                          week52HighUsd={prices[holding.symbol]?.week52HighUsd}
+                          week52LowUsd={prices[holding.symbol]?.week52LowUsd}
+                          shares={holding.shares}
+                          avgCostUsd={holding.avgCostUsd}
+                          currentWeight={(holding.valueTwd / combinedSummary.totalValueTwd) * 100}
+                          targetWeight={targetWeight}
+                          pnlPct={holding.avgCostUsd > 0 ? ((holding.priceUsd - holding.avgCostUsd) / holding.avgCostUsd) * 100 : 0}
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
