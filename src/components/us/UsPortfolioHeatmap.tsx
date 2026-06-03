@@ -22,6 +22,15 @@ interface Props {
 }
 
 export default function UsPortfolioHeatmap({ data }: Props) {
+  // 檢測螢幕寬度（Hooks 必須在最上方，不能在條件判斷後）
+  const [isMobile, setIsMobile] = React.useState(false)
+  React.useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
   if (data.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">
@@ -56,15 +65,6 @@ export default function UsPortfolioHeatmap({ data }: Props) {
     // 桌面：最小 80px，最大 200px
     return Math.max(80, Math.min(200, 80 + weightPct * 3))
   }
-
-  // 檢測螢幕寬度（簡易方案）
-  const [isMobile, setIsMobile] = React.useState(false)
-  React.useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768)
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
 
   return (
     <div>

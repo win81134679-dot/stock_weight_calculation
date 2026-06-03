@@ -51,7 +51,10 @@ export default function UsRiskRadarChart({ metrics }: Props) {
               borderRadius: 8,
               fontSize: 12,
             }}
-            formatter={(value: number) => [`${value.toFixed(0)} 分`, '評分']}
+            formatter={(value) => {
+              const v = typeof value === 'number' ? value : 0
+              return [`${v.toFixed(0)} 分`, '評分']
+            }}
           />
         </RadarChart>
       </ResponsiveContainer>

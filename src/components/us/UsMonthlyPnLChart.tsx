@@ -77,8 +77,11 @@ export default function UsMonthlyPnLChart({ snapshots }: Props) {
             borderRadius: 8,
             fontSize: 12,
           }}
-          formatter={(value: number) => [`USD ${formatUsd(value)}`, '月均損益']}
-          labelFormatter={(label: string) => `${label}（月）`}
+          formatter={(value) => {
+            const v = typeof value === 'number' ? value : 0
+            return [`USD ${formatUsd(v)}`, '月均損益']
+          }}
+          labelFormatter={(label) => `${String(label)}（月）`}
         />
         <Bar dataKey="pnlUsd" radius={[4, 4, 0, 0]}>
           {monthlyData.map((entry, index) => (

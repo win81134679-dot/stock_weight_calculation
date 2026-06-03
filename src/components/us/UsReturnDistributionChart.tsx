@@ -75,7 +75,10 @@ export default function UsReturnDistributionChart({ snapshots }: Props) {
             borderRadius: 8,
             fontSize: 12,
           }}
-          formatter={(value: number) => [`${value} 天`, '落在此區間']}
+          formatter={(value) => {
+            const v = typeof value === 'number' ? value : 0
+            return [`${v} 天`, '落在此區間']
+          }}
         />
         <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
       </BarChart>

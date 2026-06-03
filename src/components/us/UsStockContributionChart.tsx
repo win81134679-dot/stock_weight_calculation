@@ -65,13 +65,15 @@ export default function UsStockContributionChart({ data }: Props) {
             borderRadius: 8,
             fontSize: 12,
           }}
-          formatter={(value: number, name: string) => {
-            const displayName = name === 'positive' ? '獲利' : '虧損'
-            return [`USD ${formatUsd(value)}`, displayName]
+          formatter={(value, name) => {
+            const v = typeof value === 'number' ? value : 0
+            const displayName = String(name) === 'positive' ? '獲利' : '虧損'
+            return [`USD ${formatUsd(v)}`, displayName]
           }}
-          labelFormatter={(label: string) => {
-            const item = chartData.find((d) => d.symbol === label)
-            return item ? `${item.symbol} - ${item.name}` : label
+          labelFormatter={(label) => {
+            const labelStr = String(label)
+            const item = chartData.find((d) => d.symbol === labelStr)
+            return item ? `${item.symbol} - ${item.name}` : labelStr
           }}
         />
         <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1.5} />

@@ -60,10 +60,13 @@ export default function UsHoldingRankChart({ data }: Props) {
             borderRadius: 8,
             fontSize: 12,
           }}
-          formatter={(value: number) => [`USD ${formatUsd(value)}`, '市值']}
-          labelFormatter={(label: string) => {
-            const item = sorted.find((d) => d.symbol === label)
-            return item ? `${item.symbol} - ${item.name}` : label
+          formatter={(value) => {
+            const v = typeof value === 'number' ? value : 0
+            return [`USD ${formatUsd(v)}`, '市值']
+          }}
+          labelFormatter={(label) => {
+            const item = sorted.find((d) => d.symbol === String(label))
+            return item ? `${item.symbol} - ${item.name}` : String(label)
           }}
         />
         <Bar dataKey="valueUsd" radius={[0, 4, 4, 0]}>

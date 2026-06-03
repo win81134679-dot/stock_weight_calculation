@@ -704,8 +704,8 @@ export default function UsRebalanceTab() {
                           name={holding.name}
                           priceUsd={holding.priceUsd}
                           prevCloseUsd={prices[holding.symbol]?.prevCloseUsd ?? 0}
-                          week52HighUsd={prices[holding.symbol]?.week52HighUsd}
-                          week52LowUsd={prices[holding.symbol]?.week52LowUsd}
+                          week52HighUsd={undefined}
+                          week52LowUsd={undefined}
                           shares={holding.shares}
                           avgCostUsd={holding.avgCostUsd}
                           currentWeight={(holding.valueTwd / combinedSummary.totalValueTwd) * 100}
