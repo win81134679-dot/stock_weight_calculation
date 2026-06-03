@@ -23,6 +23,9 @@ import UsDrawdownChart from './UsDrawdownChart'
 import UsIndexCard from './UsIndexCard'
 import UsIntradayChart from './UsIntradayChart'
 import UsRebalanceSettings from './UsRebalanceSettings'
+import UsRiskMonitor from './UsRiskMonitor'
+import UsMonthlyPnLChart from './UsMonthlyPnLChart'
+import UsReturnDistributionChart from './UsReturnDistributionChart'
 
 type SubTab = 'overview' | 'holdings' | 'invest' | 'rebalance' | 'settings'
 
@@ -592,6 +595,20 @@ export default function UsRebalanceTab() {
                 </div>
               </div>
 
+              {/* 風險監控儀表板 */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="font-semibold text-[#1A1A2E]">風險監控 & 警示</div>
+                  <div className="text-xs text-slate-400">（自動檢測偏差、集中度、再平衡日）</div>
+                </div>
+                <UsRiskMonitor
+                  accountSummaries={accountSummaries}
+                  nextRebalanceDate={resolvedConfig.nextRebalanceDate}
+                  combinedPnlPct={combinedSummary.pnlPct}
+                  combinedValueTwd={combinedSummary.totalValueTwd}
+                />
+              </div>
+
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="font-semibold text-[#1A1A2E] mb-2">歷史損益</div>
@@ -600,6 +617,17 @@ export default function UsRebalanceTab() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="font-semibold text-[#1A1A2E] mb-2">回撤水位（USD）</div>
                   <UsDrawdownChart snapshots={store.snapshots} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">每月損益（USD）</div>
+                  <UsMonthlyPnLChart snapshots={store.snapshots} />
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="font-semibold text-[#1A1A2E] mb-2">報酬率分佈（%）</div>
+                  <UsReturnDistributionChart snapshots={store.snapshots} />
                 </div>
               </div>
 
