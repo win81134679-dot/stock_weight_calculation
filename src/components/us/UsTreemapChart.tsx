@@ -49,7 +49,7 @@ export default function UsTreemapChart({ data, unitPrefix = '' }: Props) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={260}>
+    <ResponsiveContainer width="100%" height={260} className="text-xs md:text-sm">
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
       <Treemap data={data as any[]} dataKey="size" stroke="#fff" content={<CustomContent />}>
         <Tooltip formatter={(value) => [`${unitPrefix}${Number(value).toLocaleString()}`, '市值']} />

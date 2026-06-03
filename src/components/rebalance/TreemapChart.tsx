@@ -151,7 +151,7 @@ export default function TreemapChart({ holdings }: Props) {
   if (data.length === 0) return null
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" className="text-xs md:text-sm">
       <Treemap
         data={data}
         dataKey="value"

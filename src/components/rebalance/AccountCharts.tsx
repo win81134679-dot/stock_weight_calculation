@@ -130,7 +130,7 @@ export default function AccountCharts({ accountId, holdings, snapshots }: Props)
         <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">持倉比例</p>
           <p className="text-xs text-slate-400 mb-3">各標的市值佔比（圓圈大小 = 比重）</p>
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={240} className="text-xs md:text-sm">
             <PieChart>
               <Pie
                 data={pieData}

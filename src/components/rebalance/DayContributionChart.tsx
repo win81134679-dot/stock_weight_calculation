@@ -88,11 +88,11 @@ export default function DayContributionChart({ items }: DayContributionChartProp
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={chartH}>
+      <ResponsiveContainer width="100%" height={chartH} className="text-xs md:text-sm">
         <BarChart
           data={sorted}
           layout="vertical"
-          margin={{ top: 0, right: 72, left: 0, bottom: 0 }}
+          margin={{ top: 0, right: 60, left: 0, bottom: 0 }}
           barSize={20}
         >
           <XAxis
@@ -100,17 +100,17 @@ export default function DayContributionChart({ items }: DayContributionChartProp
             tickFormatter={(v: number) =>
               v === 0 ? '0' : `${v > 0 ? '+' : ''}$${formatMoney(Math.abs(v))}`
             }
-            tick={{ fontSize: 9, fill: '#94a3b8' }}
+            tick={{ fontSize: 8, fill: '#94a3b8' }}
             axisLine={false}
             tickLine={false}
           />
           <YAxis
             type="category"
             dataKey="code"
-            tick={{ fontSize: 11, fill: '#1A1A2E', fontWeight: 700, fontFamily: 'monospace' }}
+            tick={{ fontSize: 10, fill: '#1A1A2E', fontWeight: 700, fontFamily: 'monospace' }}
             axisLine={false}
             tickLine={false}
-            width={56}
+            width={50}
           />
           <ReferenceLine x={0} stroke="#e2e8f0" strokeWidth={1} />
           <Tooltip

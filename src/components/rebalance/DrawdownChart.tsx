@@ -76,8 +76,8 @@ export default function DrawdownChart({ snapshots, accountId }: Props) {
       </div>
 
       <div className="h-44">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height="100%" className="text-xs md:text-sm">
+          <AreaChart data={data} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="ddGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#ef4444" stopOpacity={0.30} />
@@ -87,13 +87,13 @@ export default function DrawdownChart({ snapshots, accountId }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
+              tick={{ fontSize: 9, fill: '#94a3b8' }}
               tickLine={false}
               axisLine={false}
               interval="preserveStartEnd"
             />
             <YAxis
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
+              tick={{ fontSize: 9, fill: '#94a3b8' }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => `${v.toFixed(0)}%`}

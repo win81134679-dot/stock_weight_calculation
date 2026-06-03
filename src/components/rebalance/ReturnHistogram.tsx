@@ -113,22 +113,22 @@ export default function ReturnHistogram({ snapshots, accountId, bucketWidth = 0.
       </div>
 
       <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={buckets} margin={{ top: 6, right: 8, left: 0, bottom: 0 }} barSize={16}>
+        <ResponsiveContainer width="100%" height="100%" className="text-xs md:text-sm">
+          <ComposedChart data={buckets} margin={{ top: 6, right: 4, left: 0, bottom: 0 }} barSize={16}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 9, fill: '#94a3b8' }}
+              tick={{ fontSize: 8, fill: '#94a3b8' }}
               tickLine={false}
               axisLine={false}
               interval={1}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
+              tick={{ fontSize: 9, fill: '#94a3b8' }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => `${v}天`}
-              width={40}
+              width={35}
             />
             <ReferenceLine x={`${mean >= 0 ? '+' : ''}${(Math.round(mean / bucketWidth) * bucketWidth).toFixed(1)}%`}
               stroke="#2C5F8A" strokeDasharray="3 2" strokeWidth={1.5}

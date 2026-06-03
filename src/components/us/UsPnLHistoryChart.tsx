@@ -64,8 +64,8 @@ export default function UsPnLHistoryChart({ snapshots, onDeleteSnapshot }: Props
           </button>
         ))}
       </div>
-      <ResponsiveContainer width="100%" height={240}>
-        <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={240} className="text-xs md:text-sm">
+        <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
           <defs>
             <linearGradient id="usPnlFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#2C5F8A" stopOpacity={0.4} />
@@ -73,8 +73,8 @@ export default function UsPnLHistoryChart({ snapshots, onDeleteSnapshot }: Props
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-          <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-          <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={64} tickFormatter={(v: number) => `${prefix}${Math.round(v).toLocaleString()}`} />
+          <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} />
+          <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} width={56} tickFormatter={(v: number) => `${prefix}${Math.round(v).toLocaleString()}`} />
           <ReferenceLine y={0} stroke="#cbd5e1" />
           <Tooltip
             formatter={(value) => [`${prefix}${Math.round(Number(value)).toLocaleString()}`, '組合損益']}

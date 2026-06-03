@@ -164,8 +164,8 @@ export default function UsIntradayChart({ holdings, fxRate }: Props) {
           ))}
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={220} className="text-xs md:text-sm">
+        <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
           <defs>
             <linearGradient id="usIntradayUp" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={up ? '#10b981' : '#ef4444'} stopOpacity={0.35} />
@@ -173,8 +173,8 @@ export default function UsIntradayChart({ holdings, fxRate }: Props) {
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-          <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#94a3b8' }} minTickGap={40} />
-          <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={64} tickFormatter={(v: number) => `${prefix}${Math.round(v).toLocaleString()}`} />
+          <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#94a3b8' }} minTickGap={40} />
+          <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} width={56} tickFormatter={(v: number) => `${prefix}${Math.round(v).toLocaleString()}`} />
           <ReferenceLine y={0} stroke="#cbd5e1" />
           <Tooltip formatter={(value) => [`${prefix}${Math.round(Number(value)).toLocaleString()}`, '今日變化']} />
           <Area type="monotone" dataKey={dataKey} stroke={up ? '#10b981' : '#ef4444'} strokeWidth={2} fill="url(#usIntradayUp)" />

@@ -154,11 +154,11 @@ export default function StockContributionChart({ snapshots, tickerItems = [], to
       </div>
 
       <div className="h-56 sm:h-64">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" className="text-xs md:text-sm">
           <AreaChart
             data={chartData}
             stackOffset="sign"
-            margin={{ top: 6, right: 8, left: 0, bottom: 0 }}
+            margin={{ top: 6, right: 4, left: 0, bottom: 0 }}
           >
             <defs>
               {topCodes.map((code, idx) => (
@@ -171,12 +171,12 @@ export default function StockContributionChart({ snapshots, tickerItems = [], to
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
+              tick={{ fontSize: 9, fill: '#94a3b8' }}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
+              tick={{ fontSize: 9, fill: '#94a3b8' }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => `${v >= 0 ? '' : '-'}$${formatMoney(Math.abs(v))}`}

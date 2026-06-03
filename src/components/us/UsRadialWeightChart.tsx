@@ -27,7 +27,7 @@ export default function UsRadialWeightChart({ data }: Props) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={240}>
+    <ResponsiveContainer width="100%" height={240} className="text-xs md:text-sm">
       <PieChart>
         <Pie
           data={data}

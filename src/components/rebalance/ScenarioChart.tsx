@@ -174,19 +174,19 @@ export default function ScenarioChart({ holdings, prices }: Props) {
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={320}>
-        <LineChart data={chartData} margin={{ top: 28, right: 16, left: 8, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={320} className="text-xs md:text-sm">
+        <LineChart data={chartData} margin={{ top: 28, right: 10, left: 8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11, fill: '#94a3b8' }}
+            tick={{ fontSize: 10, fill: '#94a3b8' }}
             tickLine={false}
             axisLine={false}
           />
           <YAxis
             domain={[Math.floor(minVal - pad), Math.ceil(maxVal + pad)]}
             tickFormatter={(v: number) => `$${(v / 10000).toFixed(0)}萬`}
-            tick={{ fontSize: 11, fill: '#94a3b8' }}
+            tick={{ fontSize: 10, fill: '#94a3b8' }}
             tickLine={false}
             axisLine={false}
             width={60}

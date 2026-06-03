@@ -41,8 +41,8 @@ export default function UsDrawdownChart({ snapshots }: Props) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={200} className="text-xs md:text-sm">
+      <AreaChart data={data} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
         <defs>
           <linearGradient id="usDrawdownFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#ef4444" stopOpacity={0.35} />
@@ -50,8 +50,8 @@ export default function UsDrawdownChart({ snapshots }: Props) {
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-        <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={48} tickFormatter={(v: number) => `${v}%`} />
+        <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} />
+        <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} width={42} tickFormatter={(v: number) => `${v}%`} />
         <Tooltip formatter={(value) => [`${Number(value).toFixed(2)}%`, '回撤']} />
         <Area type="monotone" dataKey="drawdown" stroke="#ef4444" strokeWidth={2} fill="url(#usDrawdownFill)" />
       </AreaChart>

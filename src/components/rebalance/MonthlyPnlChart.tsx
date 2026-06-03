@@ -92,22 +92,22 @@ export default function MonthlyPnlChart({ snapshots, accountId }: Props) {
 
   return (
     <div className="h-48 sm:h-56">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 6, right: 8, left: 0, bottom: 0 }} barSize={20}>
+      <ResponsiveContainer width="100%" height="100%" className="text-xs md:text-sm">
+        <BarChart data={data} margin={{ top: 6, right: 4, left: 0, bottom: 0 }} barSize={20}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11, fill: '#94a3b8' }}
+            tick={{ fontSize: 10, fill: '#94a3b8' }}
             tickLine={false}
             axisLine={false}
           />
           <YAxis
-            tick={{ fontSize: 10, fill: '#94a3b8' }}
+            tick={{ fontSize: 9, fill: '#94a3b8' }}
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) => `${v >= 0 ? '' : '-'}$${formatMoney(Math.abs(v))}`}
             domain={[-maxAbs * 1.2, maxAbs * 1.2]}
-            width={72}
+            width={60}
           />
           <ReferenceLine y={0} stroke="#cbd5e1" strokeWidth={1.5} />
           <Tooltip

@@ -273,8 +273,8 @@ export default function PnLHistoryChart({
           <>
             {/* 折線圖 */}
             <div className="h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={intradayData} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+              <ResponsiveContainer width="100%" height="100%" className="text-xs md:text-sm">
+                <AreaChart data={intradayData} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="intradayGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%"  stopColor={isUp ? '#10b981' : '#ef4444'} stopOpacity={0.22} />
@@ -284,17 +284,17 @@ export default function PnLHistoryChart({
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                   <XAxis
                     dataKey="t"
-                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    tick={{ fontSize: 9, fill: '#94a3b8' }}
                     tickLine={false}
                     axisLine={false}
                     interval="preserveStartEnd"
                   />
                   <YAxis
-                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    tick={{ fontSize: 9, fill: '#94a3b8' }}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v) => `${v >= 0 ? '' : '-'}$${formatMoney(Math.abs(v))}`}
-                    width={72}
+                    width={60}
                   />
                   {hasNegIntraday && (
                     <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="4 2" strokeWidth={1.5}
@@ -385,8 +385,8 @@ export default function PnLHistoryChart({
       <div>
         <TabRow />
         <div className="h-52 sm:h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={combinedData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height="100%" className="text-xs md:text-sm">
+            <AreaChart data={combinedData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={areaColor} stopOpacity={0.25} />
@@ -394,13 +394,13 @@ export default function PnLHistoryChart({
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
               <YAxis
-                tick={{ fontSize: 10, fill: '#94a3b8' }}
+                tick={{ fontSize: 9, fill: '#94a3b8' }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v) => `${v >= 0 ? '' : '-'}$${formatMoney(Math.abs(v))}`}
-                width={68}
+                width={60}
               />
               {hasNeg && (
                 <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="4 2" strokeWidth={1.5}
@@ -451,8 +451,8 @@ export default function PnLHistoryChart({
         })}
       </div>
       <div className="h-52 sm:h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={perAccountData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height="100%" className="text-xs md:text-sm">
+          <AreaChart data={perAccountData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
             <defs>
               {accounts.map((acct) => {
                 const color = ACCOUNT_COLOR_HEX[acct.color] ?? '#60A5FA'
@@ -465,13 +465,13 @@ export default function PnLHistoryChart({
               })}
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-            <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
+            <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
             <YAxis
-              tick={{ fontSize: 10, fill: '#94a3b8' }}
+              tick={{ fontSize: 9, fill: '#94a3b8' }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => `${v >= 0 ? '' : '-'}$${formatMoney(Math.abs(v))}`}
-              width={68}
+              width={60}
             />
             {hasNegPA && (
               <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="4 2" strokeWidth={1.5}
